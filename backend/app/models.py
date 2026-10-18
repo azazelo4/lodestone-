@@ -289,3 +289,47 @@ DEFAULT_STATES = [
     ("Done", StateCategory.done),
     ("Cancelled", StateCategory.cancelled),
 ]
+
+
+class NotificationChannel(Base):
+    """A messenger webhook: Slack, Mattermost, Rocket.Chat, Teams, Discord, Telegram or generic JSON.
+    project_id NULL = events from every project (managed by admins)."""
+
+    __tablename__ = "notification_channels"
+    id: Mapped[uuid.UUID] = uuid_pk()
+    project_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), index=True)
+    name: Mapped[str] = mapped_column(String(100))
+    type: Mapped[str] = mapped_column(String(20))
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    events: Mapped[list[str]] = mapped_column(ARRAY(String(30)), default=list)
+    lang: Mapped[str] = mapped_column(String(5), default="en")
+    config: Mapped[dict] = mapped_column(JSONB, default=dict)
+    secrets: Mapped[str | None] = mapped_column(Text)  # encrypted: url, bot_token, signing_secret
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class NotificationPref(Base):
+    """Personal e-mail settings. No row = defaults (e-mail on, every event)."""
+
+    __tablename__ = "notification_prefs"
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    email_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    events: Mapped[list[str]] = mapped_column(ARRAY(String(30)), default=list)
+    lang: Mapped[str | None] = mapped_column(String(5))
+
+
+class OutboxMessage(Base):
+    """Transactional outbox: written together with the change, sent by the worker with retries."""
+
+    __tablename__ = "notification_outbox"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    kind: Mapped[str] = mapped_column(String(10))  # email | webhook
+    recipient: Mapped[str] = mapped_column(String(320))  # e-mail address or channel id
+    subject: Mapped[str] = mapped_column(String(300), default="")
+    payload: Mapped[dict] = mapped_column(JSONB, default=dict)
+    status: Mapped[str] = mapped_column(String(10), default="pending")  # pending | sent | failed
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    next_attempt_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    last_error: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

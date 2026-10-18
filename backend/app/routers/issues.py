@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, or_, select, update
 from sqlalchemy.orm import Session, selectinload
 
-from .. import rbac
+from .. import notify, rbac
 from ..db import get_db
 from ..deps import current_user, project_for
 from ..models import (
@@ -232,6 +232,8 @@ def create_issue(key: str, body: IssueIn, db: Session = Depends(get_db), user: U
     db.add(issue)
     db.flush()
     _log(db, issue, user, "created", None, issue.title)
+    db.refresh(issue)
+    notify.issue_created(db, issue, user)
     db.commit()
     return get_issue(f"{project.key}-{number}", db, user)
 
@@ -254,6 +256,7 @@ def patch_issue(key: str, body: IssuePatch, db: Session = Depends(get_db), user:
     issue, _ = _load(db, key, user, rbac.ISSUES_EDIT)
     project = issue.project
     data = body.model_dump(exclude_unset=True)
+    state_change, added = None, []
 
     for f in ("title", "description", "type", "priority", "start_date", "due_date", "estimate"):
         if f in data and data[f] != getattr(issue, f):
@@ -269,6 +272,7 @@ def patch_issue(key: str, body: IssuePatch, db: Session = Depends(get_db), user:
     if "state_id" in data and data["state_id"] and data["state_id"] != issue.state_id:
         st = _state(db, project, data["state_id"])
         _log(db, issue, user, "state", issue.state.name, st.name, str(issue.state_id), str(st.id))
+        state_change = (issue.state.name, st.name)
         issue.state_id, issue.state = st.id, st
         _apply_state_times(issue, st)
     if "position" in data and data["position"] is not None:
@@ -278,6 +282,7 @@ def patch_issue(key: str, body: IssuePatch, db: Session = Depends(get_db), user:
         if {u.id for u in new} != {u.id for u in issue.assignees}:
             _log(db, issue, user, "assignees", ", ".join(u.display_name for u in issue.assignees),
                  ", ".join(u.display_name for u in new))
+            added = [u for u in new if u.id not in {a.id for a in issue.assignees}]
             issue.assignees = new
     if "label_ids" in data:
         new = _labels(db, project, data["label_ids"] or [])
@@ -296,6 +301,9 @@ def patch_issue(key: str, body: IssuePatch, db: Session = Depends(get_db), user:
         issue.sprint_id = sp.id if sp else None
 
     issue.updated_at = utcnow()
+    if state_change:
+        notify.issue_state_changed(db, issue, user, *state_change)
+    notify.issue_assigned(db, issue, user, added)
     db.commit()
     db.expire_all()
     return get_issue(key, db, user)
@@ -325,6 +333,8 @@ def add_comment(key: str, body: CommentIn, db: Session = Depends(get_db), user: 
     c = Comment(issue_id=issue.id, author_id=user.id, body=body.body)
     db.add(c)
     issue.updated_at = utcnow()
+    db.flush()
+    notify.comment_added(db, issue, user, c)
     db.commit()
     db.refresh(c)
     return c

@@ -63,6 +63,18 @@ class Settings(BaseSettings):
     # who may create projects on first start: "all" or "admins" (later: permissions of the "user" role)
     project_create: str = "all"
 
+    # Notifications. SMTP_* are the initial mail settings (later edited in Administration -> Notifications).
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_security: str = "starttls"  # none | starttls | ssl
+    smtp_username: str = ""
+    smtp_password: str = ""
+    smtp_from: str = ""  # "Lodestone <lodestone@corp.local>"
+    notify_lang: str = "en"  # default language of e-mails and messenger posts: en | ru
+    notify_worker: bool = True  # send from the web process; false = run "entrypoint.sh worker" separately
+    webhook_allow_private: bool = False  # allow webhooks to private/loopback addresses (on-prem Mattermost...)
+    webhook_timeout: int = 10
+
     login_max_failures: int = 5
     login_lock_minutes: int = 5
 

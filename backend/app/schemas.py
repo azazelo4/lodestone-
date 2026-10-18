@@ -379,3 +379,69 @@ class ActivityOut(ORM):
     new_value: str | None
     actor: UserBrief | None
     created_at: datetime
+
+
+# ---------- notifications
+class NotifyPrefs(BaseModel):
+    email_enabled: bool = True
+    events: list[str] = []
+    lang: str | None = Field(default=None, pattern=r"^(en|ru)$")
+
+
+class SmtpIn(BaseModel):
+    enabled: bool = True
+    host: str = Field(default="", max_length=255)
+    port: int = Field(default=587, ge=1, le=65535)
+    security: str = Field(default="starttls", pattern=r"^(none|starttls|ssl)$")
+    username: str = ""
+    password: str | None = None  # None = keep the stored one
+    from_address: str = Field(default="", max_length=320)
+
+
+class SmtpOut(BaseModel):
+    enabled: bool
+    host: str
+    port: int
+    security: str
+    username: str
+    from_address: str
+    password_set: bool
+
+
+class SmtpTest(BaseModel):
+    to: str = Field(min_length=3, max_length=320)
+
+
+class ChannelIn(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+    type: str = Field(pattern=r"^(slack|mattermost|rocketchat|teams|discord|telegram|generic)$")
+    enabled: bool = True
+    events: list[str] = ["created", "assigned", "state_changed", "commented"]
+    lang: str = Field(default="en", pattern=r"^(en|ru)$")
+    config: dict = {}  # telegram: chat_id, thread_id, api_url
+    secrets: dict = {}  # url / bot_token / signing_secret; omitted or "" keeps the stored value on update
+
+
+class ChannelOut(ORM):
+    id: uuid.UUID
+    name: str
+    type: str
+    enabled: bool
+    events: list[str]
+    lang: str
+    config: dict
+    secrets_set: list[str] = []
+    project_key: str | None = None
+
+
+class OutboxOut(ORM):
+    id: int
+    kind: str
+    recipient: str
+    subject: str
+    status: str
+    attempts: int
+    last_error: str | None
+    created_at: datetime
+    sent_at: datetime | None
+    next_attempt_at: datetime

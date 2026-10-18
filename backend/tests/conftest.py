@@ -11,6 +11,8 @@ os.environ.update({
     "LODESTONE_DATABASE_URL": TEST_DB,
     "LODESTONE_SECRET_KEY": "test-secret-key-123",
     "LODESTONE_COOKIE_SECURE": "false",
+    "LODESTONE_NOTIFY_WORKER": "false",
+    "LODESTONE_BASE_URL": "https://tracker.test",
     "LODESTONE_ADMIN_USERNAME": "admin",
     "LODESTONE_ADMIN_PASSWORD": "admin-password-1",
     "LODESTONE_LDAP_ENABLED": "true",
@@ -67,8 +69,8 @@ def migrated():
 
 def reset_db():
     with engine().begin() as c:
-        c.execute(text("TRUNCATE users, projects, login_attempts, auth_providers, app_settings "
-                       "RESTART IDENTITY CASCADE"))
+        c.execute(text("TRUNCATE users, projects, login_attempts, auth_providers, app_settings, "
+                       "notification_channels, notification_outbox RESTART IDENTITY CASCADE"))
         c.execute(text("DELETE FROM roles WHERE NOT builtin"))
         for key, (_, _, perms) in BUILTIN_ROLES.items():
             c.execute(text("UPDATE roles SET permissions = :p, is_default = :d WHERE key = :k"),
