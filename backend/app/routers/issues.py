@@ -5,8 +5,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, or_, select, update
 from sqlalchemy.orm import Session, selectinload
 
+from .. import rbac
 from ..db import get_db
-from ..deps import current_user, project_for, role_in
+from ..deps import current_user, project_for
 from ..models import (
     CLOSED,
     Activity,
@@ -16,8 +17,6 @@ from ..models import (
     Label,
     Priority,
     Project,
-    ProjectMember,
-    Role,
     Sprint,
     State,
     StateCategory,
@@ -60,16 +59,16 @@ def _out(issue: Issue, counts: dict, cls=IssueOut):
     return o
 
 
-def _load(db: Session, key: str, user: User, need: Role = Role.viewer) -> tuple[Issue, Role | None]:
+def _load(db: Session, key: str, user: User, need: str = rbac.PROJECT_READ) -> tuple[Issue, set[str]]:
     m = KEY.match(key.strip())
     if not m:
         raise HTTPException(404, "Issue not found")
-    project, role = project_for(db, m.group(1), user, need)
+    project, perms = project_for(db, m.group(1), user, need)
     issue = db.scalar(select(Issue).options(*LOAD).where(Issue.project_id == project.id,
                                                          Issue.number == int(m.group(2))))
     if not issue:
         raise HTTPException(404, "Issue not found")
-    return issue, role
+    return issue, perms
 
 
 def _resolve_parent(db: Session, project: Project, parent_key: str | None, self_id: uuid.UUID | None = None):
@@ -94,8 +93,8 @@ def _resolve_parent(db: Session, project: Project, parent_key: str | None, self_
 def _members(db: Session, project: Project, ids: list[uuid.UUID]) -> list[User]:
     if not ids:
         return []
-    users = db.scalars(select(User).join(ProjectMember, ProjectMember.user_id == User.id).where(
-        ProjectMember.project_id == project.id, User.id.in_(ids), User.is_active.is_(True))).all()
+    users = db.scalars(select(User).where(User.id.in_(rbac.project_user_ids(project.id)), User.id.in_(ids),
+                                          User.is_active.is_(True))).all()
     if len(users) != len(set(ids)):
         raise HTTPException(422, "Assignees must be active project members")
     return list(users)
@@ -213,7 +212,7 @@ def list_issues(
 
 @router.post("/projects/{key}/issues", response_model=IssueDetail, status_code=201)
 def create_issue(key: str, body: IssueIn, db: Session = Depends(get_db), user: User = Depends(current_user)):
-    project, _ = project_for(db, key, user, Role.member)
+    project, _ = project_for(db, key, user, rbac.ISSUES_CREATE)
     st = _state(db, project, body.state_id)
     parent = _resolve_parent(db, project, body.parent_key)
     assignees = _members(db, project, body.assignee_ids)
@@ -252,7 +251,7 @@ def get_issue(key: str, db: Session = Depends(get_db), user: User = Depends(curr
 
 @router.patch("/issues/{key}", response_model=IssueDetail)
 def patch_issue(key: str, body: IssuePatch, db: Session = Depends(get_db), user: User = Depends(current_user)):
-    issue, _ = _load(db, key, user, Role.member)
+    issue, _ = _load(db, key, user, rbac.ISSUES_EDIT)
     project = issue.project
     data = body.model_dump(exclude_unset=True)
 
@@ -304,8 +303,9 @@ def patch_issue(key: str, body: IssuePatch, db: Session = Depends(get_db), user:
 
 @router.delete("/issues/{key}", status_code=204)
 def delete_issue(key: str, db: Session = Depends(get_db), user: User = Depends(current_user)):
-    issue, role = _load(db, key, user, Role.member)
-    if role != Role.admin and issue.reporter_id != user.id:
+    issue, perms = _load(db, key, user)
+    own = issue.reporter_id == user.id and rbac.ISSUES_EDIT in perms
+    if rbac.ISSUES_DELETE not in perms and not own:
         raise HTTPException(403, "Only the reporter or a project admin can delete an issue")
     db.delete(issue)
     db.commit()
@@ -321,7 +321,7 @@ def comments(key: str, db: Session = Depends(get_db), user: User = Depends(curre
 
 @router.post("/issues/{key}/comments", response_model=CommentOut, status_code=201)
 def add_comment(key: str, body: CommentIn, db: Session = Depends(get_db), user: User = Depends(current_user)):
-    issue, _ = _load(db, key, user, Role.member)
+    issue, _ = _load(db, key, user, rbac.COMMENTS_CREATE)
     c = Comment(issue_id=issue.id, author_id=user.id, body=body.body)
     db.add(c)
     issue.updated_at = utcnow()
@@ -336,10 +336,10 @@ def _comment(db: Session, comment_id: uuid.UUID, user: User) -> Comment:
         raise HTTPException(404, "Comment not found")
     issue = db.get(Issue, c.issue_id)
     project = db.get(Project, issue.project_id)
-    role = role_in(db, project, user)
-    if role is None and project.is_private:
+    perms = rbac.project_permissions(db, project, user)
+    if rbac.PROJECT_READ not in perms:
         raise HTTPException(404, "Comment not found")
-    if c.author_id != user.id and role != Role.admin:
+    if c.author_id != user.id and rbac.COMMENTS_MODERATE not in perms:
         raise HTTPException(403, "You can only change your own comments")
     return c
 
@@ -369,13 +369,10 @@ def activity(key: str, db: Session = Depends(get_db), user: User = Depends(curre
 # ---------- my work
 @router.get("/my/issues", response_model=list[IssueOut])
 def my_issues(db: Session = Depends(get_db), user: User = Depends(current_user)):
-    member_projects = select(ProjectMember.project_id).where(ProjectMember.user_id == user.id)
     stmt = (select(Issue).options(*LOAD).join(State, State.id == Issue.state_id)
             .join(issue_assignees, issue_assignees.c.issue_id == Issue.id)
             .where(issue_assignees.c.user_id == user.id, State.category.notin_(CLOSED)))
-    if not user.is_admin:
-        stmt = stmt.join(Project, Project.id == Issue.project_id).where(
-            or_(Project.is_private.is_(False), Project.id.in_(member_projects)))
+    stmt = stmt.join(Project, Project.id == Issue.project_id).where(rbac.visible_projects(db, user))
     issues = db.scalars(stmt.order_by(Issue.due_date.nulls_last(), Issue.updated_at.desc()).limit(200)).all()
     counts = _subtask_counts(db, [i.id for i in issues])
     return [_out(i, counts) for i in issues]

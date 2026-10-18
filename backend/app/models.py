@@ -17,7 +17,7 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .db import Base
@@ -29,12 +29,6 @@ def utcnow() -> datetime:
 
 def uuid_pk():
     return mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-
-
-class Role(str, enum.Enum):
-    admin = "admin"
-    member = "member"
-    viewer = "viewer"
 
 
 class StateCategory(str, enum.Enum):
@@ -67,13 +61,36 @@ def _enum(e, name):
     return Enum(e, name=name, values_callable=lambda x: [i.value for i in x])
 
 
+class AuthProvider(Base):
+    """A way to sign in: local accounts, an LDAP/AD directory or an OpenID Connect identity provider (SSO)."""
+
+    __tablename__ = "auth_providers"
+    id: Mapped[uuid.UUID] = uuid_pk()
+    slug: Mapped[str] = mapped_column(String(40), unique=True)
+    type: Mapped[str] = mapped_column(String(10))  # local | ldap | oidc
+    name: Mapped[str] = mapped_column(String(100))
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    position: Mapped[int] = mapped_column(Integer, default=0)
+    config: Mapped[dict] = mapped_column(JSONB, default=dict)
+    secrets: Mapped[str | None] = mapped_column(Text)  # encrypted JSON, see crypto.py
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class AppSetting(Base):
+    __tablename__ = "app_settings"
+    key: Mapped[str] = mapped_column(String(60), primary_key=True)
+    value: Mapped[dict] = mapped_column(JSONB)
+
+
 class User(Base):
     __tablename__ = "users"
     id: Mapped[uuid.UUID] = uuid_pk()
     username: Mapped[str] = mapped_column(String(150), unique=True, index=True)
     email: Mapped[str | None] = mapped_column(String(255))
     display_name: Mapped[str] = mapped_column(String(255))
-    source: Mapped[str] = mapped_column(String(10), default="local")  # local | ldap
+    source: Mapped[str] = mapped_column(String(10), default="local")  # local | ldap | oidc
+    provider_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("auth_providers.id", ondelete="SET NULL"))
+    external_id: Mapped[str | None] = mapped_column(String(255))  # OIDC "sub"
     password_hash: Mapped[str | None] = mapped_column(String(255))
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
@@ -98,12 +115,56 @@ class Project(Base):
     members: Mapped[list["ProjectMember"]] = relationship(cascade="all, delete-orphan")
 
 
+class Role(Base):
+    """Named set of permissions (see rbac.py). scope: global | project."""
+
+    __tablename__ = "roles"
+    id: Mapped[uuid.UUID] = uuid_pk()
+    key: Mapped[str] = mapped_column(String(40), unique=True)
+    name: Mapped[str] = mapped_column(String(80))
+    description: Mapped[str] = mapped_column(Text, default="")
+    scope: Mapped[str] = mapped_column(String(10))
+    permissions: Mapped[list[str]] = mapped_column(ARRAY(String(40)), default=list)
+    builtin: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_default: Mapped[bool] = mapped_column(Boolean, default=False)  # global role every user has
+
+
+class UserRole(Base):
+    __tablename__ = "user_roles"
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    role_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("roles.id", ondelete="CASCADE"), primary_key=True)
+
+
+class UserGroup(Base):
+    """Directory/IdP groups of a user, refreshed at every sign-in. name is lower-cased."""
+
+    __tablename__ = "user_groups"
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    provider_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("auth_providers.id", ondelete="CASCADE"),
+                                                   primary_key=True)
+    name: Mapped[str] = mapped_column(String(500), primary_key=True)
+
+
+class GroupBinding(Base):
+    """Gives a role to everyone in a directory group: globally (project_id is NULL) or in one project."""
+
+    __tablename__ = "group_bindings"
+    id: Mapped[uuid.UUID] = uuid_pk()
+    provider_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("auth_providers.id", ondelete="CASCADE"))
+    group: Mapped[str] = mapped_column(String(500))
+    role_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("roles.id", ondelete="CASCADE"))
+    project_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), index=True)
+    role: Mapped[Role] = relationship()
+    provider: Mapped[AuthProvider | None] = relationship()
+
+
 class ProjectMember(Base):
     __tablename__ = "project_members"
     project_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), primary_key=True)
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
-    role: Mapped[Role] = mapped_column(_enum(Role, "member_role"), default=Role.member)
+    role_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("roles.id", ondelete="RESTRICT"))
     user: Mapped[User] = relationship()
+    role: Mapped[Role] = relationship()
 
 
 class State(Base):

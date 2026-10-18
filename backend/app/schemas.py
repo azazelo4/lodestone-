@@ -4,7 +4,7 @@ from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from .models import IssueType, Priority, Role, StateCategory
+from .models import IssueType, Priority, StateCategory
 
 
 class ORM(BaseModel):
@@ -28,14 +28,145 @@ class UserBrief(ORM):
     display_name: str
 
 
+class MeOut(UserOut):
+    permissions: list[str] = []
+
+
 class LoginIn(BaseModel):
     username: str = Field(min_length=1, max_length=150)
     password: str = Field(min_length=1, max_length=512)
+    provider: str | None = None  # slug of an LDAP provider when there are several
+
+
+class ProviderBrief(BaseModel):
+    slug: str
+    type: str
+    name: str
 
 
 class AuthConfig(BaseModel):
-    ldap: bool
-    local: bool
+    setup_required: bool
+    password: bool  # show the username/password form
+    password_providers: list[ProviderBrief]  # local / ldap
+    sso: list[ProviderBrief]  # oidc buttons
+
+
+# ---------- auth providers (admin, setup wizard)
+class ProviderIn(BaseModel):
+    slug: str = Field(pattern=r"^[a-z0-9][a-z0-9-]{0,39}$")
+    type: str = Field(pattern=r"^(local|ldap|oidc)$")
+    name: str = Field(min_length=1, max_length=100)
+    enabled: bool = True
+    position: int = 0
+    config: dict = {}  # secrets (bind_password, client_secret) may be included; they are stored encrypted
+
+
+class ProviderPatch(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=100)
+    enabled: bool | None = None
+    position: int | None = None
+    config: dict | None = None  # replaces non-secret settings
+    secrets: dict | None = None  # {"client_secret": "..."}; omitted keys are kept, "" clears
+
+
+class ProviderOut(ORM):
+    id: uuid.UUID
+    slug: str
+    type: str
+    name: str
+    enabled: bool
+    position: int
+    config: dict
+    secrets_set: list[str] = []
+    redirect_uri: str | None = None  # OIDC: register this in the IdP
+
+
+class ProviderTest(BaseModel):
+    provider: ProviderIn | None = None  # unsaved settings (wizard)
+    provider_id: uuid.UUID | None = None  # or a saved provider
+    username: str = ""  # LDAP: also look this user up
+
+
+class TestResult(BaseModel):
+    ok: bool
+    message: str
+
+
+# ---------- setup wizard
+class SetupAdmin(BaseModel):
+    username: str = Field(min_length=2, max_length=150, pattern=r"^[A-Za-z0-9._-]+$")
+    display_name: str = Field(min_length=1, max_length=255)
+    email: str | None = None
+    password: str = Field(min_length=10, max_length=256)
+
+
+class SetupIn(BaseModel):
+    token: str = Field(max_length=200)
+    admin: SetupAdmin
+    local_mode: str = Field(default="all", pattern=r"^(all|admins)$")  # admins = break-glass only
+    providers: list[ProviderIn] = []  # ldap / oidc
+
+
+class SetupToken(BaseModel):
+    token: str = Field(max_length=200)
+
+
+class SetupStatus(BaseModel):
+    required: bool
+    base_url: str
+
+
+# ---------- RBAC
+class PermissionInfo(BaseModel):
+    key: str
+    scope: str
+
+
+class RoleBrief(ORM):
+    id: uuid.UUID
+    key: str
+    name: str
+
+
+class RoleOut(RoleBrief):
+    description: str
+    scope: str
+    permissions: list[str]
+    builtin: bool
+    is_default: bool
+
+
+class RoleIn(BaseModel):
+    key: str = Field(pattern=r"^[a-z][a-z0-9_-]{1,39}$")
+    name: str = Field(min_length=1, max_length=80)
+    description: str = ""
+    scope: str = Field(pattern=r"^(global|project)$")
+    permissions: list[str] = []
+
+
+class RolePatch(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=80)
+    description: str | None = None
+    permissions: list[str] | None = None
+    is_default: bool | None = None
+
+
+class BindingIn(BaseModel):
+    group: str = Field(min_length=1, max_length=500)  # LDAP group DN or IdP group name
+    role: str  # role key
+    provider: str | None = None  # provider slug; empty = group of that name from any provider
+
+
+class BindingOut(ORM):
+    id: uuid.UUID
+    group: str
+    role: RoleBrief
+    provider: ProviderBrief | None
+    project_key: str | None = None
+
+
+class UserRolesIn(BaseModel):
+    roles: list[str]  # global role keys
 
 
 class UserAdminPatch(BaseModel):
@@ -110,22 +241,23 @@ class ProjectOut(ORM):
 
 class ProjectDetail(ProjectOut):
     states: list[StateOut]
-    my_role: Role | None = None
+    my_role: str | None = None  # key of the direct membership role
+    my_permissions: list[str] = []
     open_issues: int = 0
 
 
 class MemberOut(ORM):
     user: UserBrief
-    role: Role
+    role: RoleBrief
 
 
 class MemberIn(BaseModel):
     user_id: uuid.UUID
-    role: Role = Role.member
+    role: str = "member"  # project role key
 
 
 class MemberPatch(BaseModel):
-    role: Role
+    role: str
 
 
 class LabelOut(ORM):

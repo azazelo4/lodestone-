@@ -9,13 +9,21 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy import select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
+from . import providers
 from .config import get_settings
 from .db import engine, session_factory
 from .models import User, utcnow
-from .routers import auth, issues, projects, users
+from .routers import admin, auth, issues, projects, setup, users
 from .security import hash_password
 
 log = logging.getLogger("lodestone")
+
+
+def bootstrap():
+    """Builtin roles, sign-in providers / setup wizard state, then the break-glass admin."""
+    with session_factory()() as db:
+        providers.bootstrap(db)
+    bootstrap_admin()
 
 
 def bootstrap_admin():
@@ -41,14 +49,14 @@ async def lifespan(_: FastAPI):
     s = get_settings()
     if s.secret_key == "change-me":
         log.warning("LODESTONE_SECRET_KEY is the default value — set a random secret in production")
-    bootstrap_admin()
+    bootstrap()
     yield
 
 
 app = FastAPI(title="Lodestone", version="0.1.0", lifespan=lifespan, docs_url="/api/docs",
               openapi_url="/api/openapi.json", redoc_url=None)
 
-for r in (auth.router, users.router, projects.router, issues.router):
+for r in (auth.router, setup.router, admin.router, users.router, projects.router, issues.router):
     app.include_router(r)
 
 

@@ -31,7 +31,8 @@ from sqlalchemy import text  # noqa: E402
 from alembic import command  # noqa: E402
 from app import ldap_auth  # noqa: E402
 from app.db import engine  # noqa: E402
-from app.main import app, bootstrap_admin  # noqa: E402
+from app.main import app, bootstrap  # noqa: E402
+from app.rbac import BUILTIN_ROLES  # noqa: E402
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -64,11 +65,20 @@ def migrated():
     yield
 
 
+def reset_db():
+    with engine().begin() as c:
+        c.execute(text("TRUNCATE users, projects, login_attempts, auth_providers, app_settings "
+                       "RESTART IDENTITY CASCADE"))
+        c.execute(text("DELETE FROM roles WHERE NOT builtin"))
+        for key, (_, _, perms) in BUILTIN_ROLES.items():
+            c.execute(text("UPDATE roles SET permissions = :p, is_default = :d WHERE key = :k"),
+                      {"p": list(perms), "d": key == "user", "k": key})
+
+
 @pytest.fixture(autouse=True)
 def clean_db():
-    with engine().begin() as c:
-        c.execute(text("TRUNCATE users, projects, login_attempts RESTART IDENTITY CASCADE"))
-    bootstrap_admin()
+    reset_db()
+    bootstrap()
     yield
 
 
@@ -79,9 +89,10 @@ def fake_ldap(monkeypatch):
     for dn, attrs in DIRECTORY.items():
         loader.strategy.add_entry(dn, attrs)
     monkeypatch.setattr(ldap_auth, "_server", lambda s: server)
-    real = ldap_auth.authenticate
-    monkeypatch.setattr(ldap_auth, "authenticate", functools.partial(
-        real, connection_factory=functools.partial(Connection, client_strategy=MOCK_SYNC)))
+    mock = functools.partial(Connection, client_strategy=MOCK_SYNC)
+    monkeypatch.setattr(ldap_auth, "authenticate", functools.partial(ldap_auth.authenticate, connection_factory=mock))
+    monkeypatch.setattr(ldap_auth, "test_connection", functools.partial(ldap_auth.test_connection,
+                                                                         connection_factory=mock))
     yield server
 
 

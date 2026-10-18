@@ -56,11 +56,12 @@ def run():
         p = Project(key="DEMO", name="Platform team", description="Infrastructure and data platform work",
                     is_private=False, lead_id=users[0].id, issue_seq=0)
         p.states = [State(name=n, category=c, position=i) for i, (n, c) in enumerate(DEFAULT_STATES)]
-        p.members = [ProjectMember(user_id=u.id, role=Role.admin if i == 0 else Role.member)
+        roles = {r.key: r.id for r in db.scalars(select(Role).where(Role.scope == "project")).all()}
+        p.members = [ProjectMember(user_id=u.id, role_id=roles["admin"] if i == 0 else roles["member"])
                      for i, u in enumerate(users)]
         admin = db.scalar(select(User).where(User.is_admin.is_(True), User.source == "local"))
         if admin:
-            p.members.append(ProjectMember(user_id=admin.id, role=Role.admin))
+            p.members.append(ProjectMember(user_id=admin.id, role_id=roles["admin"]))
         db.add(p)
         db.flush()
         states = {s.name: s for s in p.states}
