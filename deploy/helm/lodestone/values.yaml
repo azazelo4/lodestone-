@@ -1,0 +1,58 @@
+image:
+  repository: ghcr.io/OWNER/lodestone
+  tag: ""               # defaults to .Chart.AppVersion
+  pullPolicy: IfNotPresent
+imagePullSecrets: []
+
+replicaCount: 2
+workers: 2              # uvicorn workers per pod
+
+# Session signing key and DB URL go to a Secret. Use existingSecret in production
+# (keys: secret-key, database-url, ldap-bind-password, admin-password).
+existingSecret: ""
+secretKey: ""           # random 32+ chars; required when existingSecret is empty
+databaseUrl: ""         # postgresql+psycopg://user:pass@host:5432/lodestone
+
+admin:
+  username: admin       # break-glass local account; leave password empty to disable
+  password: ""
+
+auth:
+  localEnabled: true
+  projectCreate: all    # all | admins
+  ldap:
+    enabled: false
+    url: ldaps://dc01.corp.local:636
+    startTls: false
+    verifyCert: true
+    caSecret: ""        # Secret with key ca.crt (corporate root CA)
+    bindDn: CN=svc-lodestone,OU=Service Accounts,DC=corp,DC=local
+    bindPassword: ""
+    userBase: OU=Users,DC=corp,DC=local
+    userFilter: (sAMAccountName={username})
+    attrEmail: mail
+    attrName: displayName
+    allowedGroup: ""    # CN=Lodestone Users,OU=Groups,DC=corp,DC=local
+    adminGroup: ""      # CN=Lodestone Admins,OU=Groups,DC=corp,DC=local
+    nestedGroups: true  # AD transitive membership
+
+ingress:
+  enabled: true
+  className: nginx
+  host: lodestone.example.com
+  tls: []               # [{secretName: lodestone-tls, hosts: [lodestone.example.com]}]
+  annotations: {}
+
+service:
+  port: 80
+
+resources:
+  requests: {cpu: 50m, memory: 192Mi}
+  limits: {memory: 512Mi}
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+nodeSelector: {}
+tolerations: []
+affinity: {}

@@ -1,0 +1,11 @@
+Lodestone is starting.
+
+  URL: https://{{ .Values.ingress.host }}
+{{- if .Values.auth.ldap.enabled }}
+  Sign in with your directory account{{ if .Values.auth.ldap.allowedGroup }} (members of {{ .Values.auth.ldap.allowedGroup }}){{ end }}.
+{{- end }}
+{{- if .Values.admin.password }}
+  Break-glass admin: {{ .Values.admin.username }} (password from the Secret).
+{{- end }}
+
+  Migrations run in the "migrate" init container on every rollout.

@@ -1,4 +1,5 @@
 import logging
+import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -6,10 +7,11 @@ from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import select, text
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from .config import get_settings
 from .db import engine, session_factory
-from .models import User
+from .models import User, utcnow
 from .routers import auth, issues, projects, users
 from .security import hash_password
 
@@ -21,12 +23,15 @@ def bootstrap_admin():
     s = get_settings()
     if not (s.admin_username and s.admin_password):
         return
+    name = s.admin_username.lower()
     with session_factory()() as db:
-        u = db.scalar(select(User).where(User.username == s.admin_username.lower()))
-        if u is None:
-            u = User(username=s.admin_username.lower(), display_name="Administrator", source="local")
-            db.add(u)
-            log.info("bootstrap admin created: %s", u.username)
+        # several workers/replicas start at once: insert-if-missing must not race
+        created = db.execute(pg_insert(User).values(
+            id=uuid.uuid4(), username=name, display_name="Administrator", source="local", is_admin=True,
+            is_active=True, created_at=utcnow()).on_conflict_do_nothing(index_elements=["username"])).rowcount
+        if created:
+            log.info("bootstrap admin created: %s", name)
+        u = db.scalar(select(User).where(User.username == name))
         u.password_hash, u.is_admin, u.is_active, u.source = hash_password(s.admin_password), True, True, "local"
         db.commit()
 

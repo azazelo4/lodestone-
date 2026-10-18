@@ -1,0 +1,67 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "lodestone.fullname" . }}
+  labels: {{- include "lodestone.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels: {{- include "lodestone.selector" . | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- include "lodestone.selector" . | nindent 8 }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext: {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      initContainers:
+        - name: migrate          # applies Alembic migrations before the app container starts
+          image: {{ include "lodestone.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: ["migrate"]
+          env: {{- include "lodestone.env" . | nindent 12 }}
+          envFrom:
+            - configMapRef: {name: {{ include "lodestone.fullname" . }}}
+          securityContext: {{- include "lodestone.containerSecurity" . | nindent 12 }}
+      containers:
+        - name: app
+          image: {{ include "lodestone.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: ["serve"]
+          env: {{- include "lodestone.env" . | nindent 12 }}
+          envFrom:
+            - configMapRef: {name: {{ include "lodestone.fullname" . }}}
+          securityContext: {{- include "lodestone.containerSecurity" . | nindent 12 }}
+          ports: [{name: http, containerPort: 8000}]
+          readinessProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 30
+            failureThreshold: 5
+          resources: {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - {name: tmp, mountPath: /tmp}
+            {{- if .Values.auth.ldap.caSecret }}
+            - {name: ca, mountPath: /etc/lodestone/ca, readOnly: true}
+            {{- end }}
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        {{- if .Values.auth.ldap.caSecret }}
+        - name: ca
+          secret: {secretName: {{ .Values.auth.ldap.caSecret }}}
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity: {{- toYaml . | nindent 8 }}
+      {{- end }}

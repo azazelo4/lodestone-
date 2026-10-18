@@ -1,0 +1,28 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "lodestone.fullname" . }}
+  labels: {{- include "lodestone.labels" . | nindent 4 }}
+data:
+  LODESTONE_BASE_URL: {{ printf "https://%s" .Values.ingress.host | quote }}
+  LODESTONE_COOKIE_SECURE: "true"
+  LODESTONE_AUTO_MIGRATE: "false"
+  LODESTONE_WORKERS: {{ .Values.workers | quote }}
+  LODESTONE_LOCAL_AUTH_ENABLED: {{ .Values.auth.localEnabled | quote }}
+  LODESTONE_PROJECT_CREATE: {{ .Values.auth.projectCreate | quote }}
+  LODESTONE_ADMIN_USERNAME: {{ .Values.admin.username | quote }}
+  LODESTONE_LDAP_ENABLED: {{ .Values.auth.ldap.enabled | quote }}
+  LODESTONE_LDAP_URL: {{ .Values.auth.ldap.url | quote }}
+  LODESTONE_LDAP_START_TLS: {{ .Values.auth.ldap.startTls | quote }}
+  LODESTONE_LDAP_VERIFY_CERT: {{ .Values.auth.ldap.verifyCert | quote }}
+  LODESTONE_LDAP_BIND_DN: {{ .Values.auth.ldap.bindDn | quote }}
+  LODESTONE_LDAP_USER_BASE: {{ .Values.auth.ldap.userBase | quote }}
+  LODESTONE_LDAP_USER_FILTER: {{ .Values.auth.ldap.userFilter | quote }}
+  LODESTONE_LDAP_ATTR_EMAIL: {{ .Values.auth.ldap.attrEmail | quote }}
+  LODESTONE_LDAP_ATTR_NAME: {{ .Values.auth.ldap.attrName | quote }}
+  LODESTONE_LDAP_ALLOWED_GROUP: {{ .Values.auth.ldap.allowedGroup | quote }}
+  LODESTONE_LDAP_ADMIN_GROUP: {{ .Values.auth.ldap.adminGroup | quote }}
+  LODESTONE_LDAP_NESTED_GROUPS: {{ .Values.auth.ldap.nestedGroups | quote }}
+  {{- if .Values.auth.ldap.caSecret }}
+  LODESTONE_LDAP_CA_FILE: /etc/lodestone/ca/ca.crt
+  {{- end }}

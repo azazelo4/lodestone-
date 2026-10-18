@@ -1,0 +1,6 @@
+apiVersion: v2
+name: lodestone
+description: Lodestone — self-hosted issue tracker with LDAP/Active Directory sign-in
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

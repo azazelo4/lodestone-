@@ -1,0 +1,45 @@
+# Demo directory for docker-compose. Passwords are for local testing only.
+dn: ou=people,dc=example,dc=org
+objectClass: organizationalUnit
+ou: people
+
+dn: ou=groups,dc=example,dc=org
+objectClass: organizationalUnit
+ou: groups
+
+dn: uid=alice,ou=people,dc=example,dc=org
+objectClass: inetOrgPerson
+uid: alice
+cn: Alice Kemelbekova
+sn: Kemelbekova
+displayName: Alice Kemelbekova
+mail: alice@example.org
+userPassword: alice-password
+
+dn: uid=bob,ou=people,dc=example,dc=org
+objectClass: inetOrgPerson
+uid: bob
+cn: Bob Nurlanov
+sn: Nurlanov
+displayName: Bob Nurlanov
+mail: bob@example.org
+userPassword: bob-password
+
+dn: uid=mallory,ou=people,dc=example,dc=org
+objectClass: inetOrgPerson
+uid: mallory
+cn: Mallory Outside
+sn: Outside
+displayName: Mallory Outside
+userPassword: mallory-password
+
+dn: cn=lodestone-users,ou=groups,dc=example,dc=org
+objectClass: groupOfNames
+cn: lodestone-users
+member: uid=alice,ou=people,dc=example,dc=org
+member: uid=bob,ou=people,dc=example,dc=org
+
+dn: cn=lodestone-admins,ou=groups,dc=example,dc=org
+objectClass: groupOfNames
+cn: lodestone-admins
+member: uid=alice,ou=people,dc=example,dc=org

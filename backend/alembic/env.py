@@ -1,4 +1,4 @@
-from sqlalchemy import engine_from_config, pool
+from sqlalchemy import engine_from_config, pool, text
 
 from alembic import context
 from app import models  # noqa: F401  (registers tables)
@@ -21,6 +21,9 @@ def run_online():
     connectable = engine_from_config(config.get_section(config.config_ini_section), prefix="sqlalchemy.",
                                      poolclass=pool.NullPool)
     with connectable.connect() as connection:
+        # several pods may start at once: serialize migrations with a session-level advisory lock
+        connection.execute(text("SELECT pg_advisory_lock(7354211)"))
+        connection.commit()
         context.configure(connection=connection, target_metadata=target_metadata, compare_type=True)
         with context.begin_transaction():
             context.run_migrations()
