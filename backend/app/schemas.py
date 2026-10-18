@@ -1,0 +1,249 @@
+import re
+import uuid
+from datetime import date, datetime
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from .models import IssueType, Priority, Role, StateCategory
+
+
+class ORM(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+
+# ---------- users / auth
+class UserOut(ORM):
+    id: uuid.UUID
+    username: str
+    display_name: str
+    email: str | None
+    is_admin: bool
+    is_active: bool
+    source: str
+
+
+class UserBrief(ORM):
+    id: uuid.UUID
+    username: str
+    display_name: str
+
+
+class LoginIn(BaseModel):
+    username: str = Field(min_length=1, max_length=150)
+    password: str = Field(min_length=1, max_length=512)
+
+
+class AuthConfig(BaseModel):
+    ldap: bool
+    local: bool
+
+
+class UserAdminPatch(BaseModel):
+    is_admin: bool | None = None
+    is_active: bool | None = None
+
+
+class LocalUserIn(BaseModel):
+    username: str = Field(min_length=2, max_length=150, pattern=r"^[A-Za-z0-9._-]+$")
+    display_name: str = Field(min_length=1, max_length=255)
+    email: str | None = None
+    password: str = Field(min_length=10, max_length=256)
+    is_admin: bool = False
+
+
+# ---------- projects
+KEY_RE = re.compile(r"^[A-Z][A-Z0-9]{1,9}$")
+
+
+class StateOut(ORM):
+    id: uuid.UUID
+    name: str
+    category: StateCategory
+    position: int
+
+
+class StateIn(BaseModel):
+    name: str = Field(min_length=1, max_length=60)
+    category: StateCategory
+    position: int | None = None
+
+
+class StatePatch(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=60)
+    category: StateCategory | None = None
+    position: int | None = None
+
+
+class ProjectIn(BaseModel):
+    key: str
+    name: str = Field(min_length=1, max_length=200)
+    description: str = ""
+    is_private: bool = True
+
+    @field_validator("key")
+    @classmethod
+    def _key(cls, v: str) -> str:
+        v = v.strip().upper()
+        if not KEY_RE.match(v):
+            raise ValueError("key: 2-10 Latin letters/digits, starting with a letter")
+        return v
+
+
+class ProjectPatch(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    description: str | None = None
+    is_private: bool | None = None
+    lead_id: uuid.UUID | None = None
+    archived: bool | None = None
+
+
+class ProjectOut(ORM):
+    id: uuid.UUID
+    key: str
+    name: str
+    description: str
+    is_private: bool
+    archived: bool
+    lead: UserBrief | None
+    created_at: datetime
+
+
+class ProjectDetail(ProjectOut):
+    states: list[StateOut]
+    my_role: Role | None = None
+    open_issues: int = 0
+
+
+class MemberOut(ORM):
+    user: UserBrief
+    role: Role
+
+
+class MemberIn(BaseModel):
+    user_id: uuid.UUID
+    role: Role = Role.member
+
+
+class MemberPatch(BaseModel):
+    role: Role
+
+
+class LabelOut(ORM):
+    id: uuid.UUID
+    name: str
+    color: str
+
+
+class LabelIn(BaseModel):
+    name: str = Field(min_length=1, max_length=60)
+    color: str = Field(default="#8a8f98", pattern=r"^#[0-9a-fA-F]{6}$")
+
+
+class SprintIn(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    goal: str = ""
+    start_date: date | None = None
+    end_date: date | None = None
+
+
+class SprintPatch(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    goal: str | None = None
+    start_date: date | None = None
+    end_date: date | None = None
+    closed: bool | None = None
+
+
+class SprintOut(ORM):
+    id: uuid.UUID
+    name: str
+    goal: str
+    start_date: date | None
+    end_date: date | None
+    closed: bool
+
+
+# ---------- issues
+class IssueIn(BaseModel):
+    title: str = Field(min_length=1, max_length=300)
+    description: str = ""
+    type: IssueType = IssueType.task
+    state_id: uuid.UUID | None = None
+    priority: Priority = Priority.none
+    assignee_ids: list[uuid.UUID] = []
+    label_ids: list[uuid.UUID] = []
+    parent_key: str | None = None
+    sprint_id: uuid.UUID | None = None
+    start_date: date | None = None
+    due_date: date | None = None
+    estimate: float | None = Field(default=None, ge=0)
+
+
+class IssuePatch(BaseModel):
+    """Only fields present in the request are changed (exclude_unset)."""
+
+    title: str | None = Field(default=None, min_length=1, max_length=300)
+    description: str | None = None
+    type: IssueType | None = None
+    state_id: uuid.UUID | None = None
+    priority: Priority | None = None
+    assignee_ids: list[uuid.UUID] | None = None
+    label_ids: list[uuid.UUID] | None = None
+    parent_key: str | None = None
+    sprint_id: uuid.UUID | None = None
+    start_date: date | None = None
+    due_date: date | None = None
+    estimate: float | None = Field(default=None, ge=0)
+    position: float | None = None
+
+
+class IssueOut(ORM):
+    id: uuid.UUID
+    key: str
+    number: int
+    type: IssueType
+    title: str
+    priority: Priority
+    state: StateOut
+    assignees: list[UserBrief]
+    labels: list[LabelOut]
+    parent_key: str | None = None
+    sprint_id: uuid.UUID | None
+    start_date: date | None
+    due_date: date | None
+    estimate: float | None
+    position: float
+    created_at: datetime
+    updated_at: datetime
+    completed_at: datetime | None
+    subtasks_total: int = 0
+    subtasks_done: int = 0
+
+
+class IssueDetail(IssueOut):
+    description: str
+    reporter: UserBrief | None
+    project_key: str = ""
+    started_at: datetime | None
+    subtasks: list[IssueOut] = []
+
+
+class CommentIn(BaseModel):
+    body: str = Field(min_length=1, max_length=20000)
+
+
+class CommentOut(ORM):
+    id: uuid.UUID
+    body: str
+    author: UserBrief | None
+    created_at: datetime
+    edited_at: datetime | None
+
+
+class ActivityOut(ORM):
+    id: int
+    field: str
+    old_value: str | None
+    new_value: str | None
+    actor: UserBrief | None
+    created_at: datetime
