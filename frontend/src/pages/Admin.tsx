@@ -1,12 +1,15 @@
 import { useCallback, useEffect, useState } from "react";
 import { Navigate, NavLink, Route, Routes } from "react-router-dom";
 import { useSession } from "../App";
-import { api, ApiError, Binding, BindingIn, Provider, ProviderBrief, ProviderIn, ProviderType, Role, RoleBrief, User } from "../api";
+import {
+  api, ApiError, Binding, BindingIn, OutboxRow, Provider, ProviderBrief, ProviderIn, ProviderType, Role, RoleBrief, Smtp, TestResult, User,
+} from "../api";
 import { Modal, Toast } from "../components/bits";
+import ChannelsEditor from "../components/ChannelsEditor";
 import ProviderForm, { emptyProvider } from "../components/ProviderForm";
 import { TKey, useT } from "../i18n";
 
-export const ADMIN_PERMS = ["auth.manage", "users.manage", "roles.manage"];
+export const ADMIN_PERMS = ["auth.manage", "users.manage", "roles.manage", "notifications.manage"];
 
 export function roleName(t: (k: TKey) => string, r: RoleBrief & { builtin?: boolean }) {
   return ["admin", "member", "viewer", "user"].includes(r.key) ? t(`role.${r.key}` as TKey) : r.name;
@@ -383,6 +386,126 @@ function Users() {
   );
 }
 
+// ---------- notifications
+function SmtpForm() {
+  const { t } = useT();
+  const { run, ui } = useRunner();
+  const { user } = useSession();
+  const [f, setF] = useState<Smtp | null>(null);
+  const [password, setPassword] = useState("");
+  const [to, setTo] = useState(user.email ?? "");
+  const [result, setResult] = useState<TestResult | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { api.smtp().then(setF).catch(() => {}); }, []);
+  if (!f) return null;
+  const set = (patch: Partial<Smtp>) => { setResult(null); setF({ ...f, ...patch }); };
+  const save = () => run(async () => {
+    const { password_set: _, ...rest } = f;
+    setF(await api.setSmtp({ ...rest, password: password || null }));
+    setPassword("");
+  }, t("project.saved"));
+
+  async function test() {
+    setBusy(true);
+    try {
+      if (await save()) setResult(await api.testSmtp(to.trim()));
+    } catch (e) {
+      setResult({ ok: false, message: e instanceof ApiError ? e.message : t("err.generic") });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="prov-form" style={{ maxWidth: 640 }}>
+      {ui}
+      <label className="check"><input type="checkbox" checked={f.enabled} onChange={(e) => set({ enabled: e.target.checked })} />{t("ntf.smtp.enabled")}</label>
+      {!(f.enabled && f.host && f.from_address) && <div className="hint">{t("ntf.smtp.off")}</div>}
+      <div className="row3">
+        <label className="field"><span>{t("ntf.smtp.host")}</span>
+          <input className="input" value={f.host} placeholder="smtp.corp.local" onChange={(e) => set({ host: e.target.value.trim(), enabled: f.enabled || !f.host })} /></label>
+        <label className="field"><span>{t("ntf.smtp.port")}</span>
+          <input className="input num" type="number" min={1} max={65535} value={f.port} onChange={(e) => set({ port: Number(e.target.value) })} /></label>
+        <label className="field"><span>{t("ntf.smtp.security")}</span>
+          <select className="select" value={f.security} onChange={(e) => {
+            const security = e.target.value as Smtp["security"];
+            set({ security, port: { none: 25, starttls: 587, ssl: 465 }[security] });
+          }}>
+            <option value="starttls">STARTTLS</option>
+            <option value="ssl">SSL/TLS</option>
+            <option value="none">{t("ntf.smtp.security.none")}</option>
+          </select></label>
+      </div>
+      <div className="row2">
+        <label className="field"><span>{t("ntf.smtp.username")}</span>
+          <input className="input" autoComplete="off" value={f.username} onChange={(e) => set({ username: e.target.value })} /></label>
+        <label className="field"><span>{t("ntf.smtp.password")}</span>
+          <input className="input" type="password" autoComplete="new-password" value={password}
+                 placeholder={f.password_set ? "••••••••" : undefined} onChange={(e) => setPassword(e.target.value)} />
+          {f.password_set && <span className="hint">{t("secret.keep")}</span>}</label>
+      </div>
+      <label className="field"><span>{t("ntf.smtp.from")}</span>
+        <input className="input" value={f.from_address} placeholder="Lodestone <tracker@corp.local>"
+               onChange={(e) => set({ from_address: e.target.value })} /></label>
+      <div><button className="btn primary" onClick={save}>{t("admin.save")}</button></div>
+      <div className="test-row">
+        <input className="input" type="email" style={{ maxWidth: 260 }} aria-label={t("ntf.smtp.testTo")} placeholder={t("ntf.smtp.testTo")}
+               value={to} onChange={(e) => setTo(e.target.value)} />
+        <button className="btn" disabled={busy || !to.includes("@")} onClick={test}>{t("ntf.smtp.test")}</button>
+        {result && <span className={result.ok ? "ok" : "bad"} role="status">{result.message}</span>}
+      </div>
+    </div>
+  );
+}
+
+function Outbox() {
+  const { t, lang } = useT();
+  const { run, ui } = useRunner();
+  const [rows, setRows] = useState<OutboxRow[]>([]);
+  const [status, setStatus] = useState("");
+  const load = useCallback(async () => setRows(await api.outbox(status || undefined)), [status]);
+  useEffect(() => { load().catch(() => {}); }, [load]);
+  const when = (s: string) => new Date(s).toLocaleString(lang, { dateStyle: "short", timeStyle: "short" });
+  return (
+    <div>
+      {ui}
+      <div className="test-row" style={{ marginBottom: 8 }}>
+        <select className="select" style={{ width: 180 }} aria-label={t("ntf.outbox")} value={status} onChange={(e) => setStatus(e.target.value)}>
+          <option value="">{t("ntf.outbox.all")}</option>
+          {(["pending", "sent", "failed"] as const).map((s) => <option key={s} value={s}>{t(`ntf.status.${s}`)}</option>)}
+        </select>
+        <button className="btn ghost sm" onClick={load}>↻</button>
+      </div>
+      {rows.length === 0 && <div className="hint" style={{ padding: "8px 0" }}>{t("ntf.outbox.empty")}</div>}
+      {rows.map((m) => (
+        <div className="member-row" key={m.id}>
+          <span className={`tag status-${m.status}`} style={{ marginLeft: 0 }}>{t(`ntf.status.${m.status}`)}</span>
+          <div className="name">
+            <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.subject}</div>
+            <div className="hint">{m.kind === "email" ? m.recipient : t("ntf.channels")} · {when(m.created_at)}
+              {m.attempts > 0 && ` · ${t("ntf.outbox.attempts", { n: String(m.attempts) })}`}</div>
+            {m.last_error && m.status !== "sent" && <div className="hint bad" style={{ overflowWrap: "anywhere" }}>{m.last_error}</div>}
+          </div>
+          {m.status !== "sent" && (
+            <button className="btn ghost sm" onClick={() => run(() => api.retryOutbox(m.id)).then(load)}>{t("ntf.outbox.retry")}</button>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function Notifications() {
+  const { t } = useT();
+  return (
+    <>
+      <section><h3>{t("ntf.smtp")}</h3><SmtpForm /></section>
+      <section><h3>{t("ntf.channels.global")}</h3><ChannelsEditor /></section>
+      <section><h3>{t("ntf.outbox")}</h3><Outbox /></section>
+    </>
+  );
+}
+
 export default function Admin() {
   const { t } = useT();
   const { user } = useSession();
@@ -392,6 +515,7 @@ export default function Admin() {
     { path: "users", label: t("admin.tab.users"), ok: can("users.manage"), el: <Users /> },
     { path: "roles", label: t("admin.tab.roles"), ok: can("roles.manage"), el: <Roles /> },
     { path: "groups", label: t("admin.tab.groups"), ok: can("roles.manage"), el: <Groups /> },
+    { path: "notifications", label: t("admin.tab.notifications"), ok: can("notifications.manage"), el: <Notifications /> },
   ].filter((x) => x.ok);
   if (!tabs.length) return <Navigate to="/" replace />;
   const tab = ({ isActive }: { isActive: boolean }) => (isActive ? "active" : "");

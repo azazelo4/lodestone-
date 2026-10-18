@@ -7,6 +7,7 @@ import { detectLang, I18n, Lang, translator, useT } from "./i18n";
 import Admin, { ADMIN_PERMS } from "./pages/Admin";
 import IssuePage from "./pages/IssuePage";
 import Login from "./pages/Login";
+import MyNotifications from "./pages/MyNotifications";
 import MyWork from "./pages/MyWork";
 import ProjectView from "./pages/ProjectView";
 import Setup from "./pages/Setup";
@@ -65,7 +66,8 @@ function Shell() {
             ))}
           </div>
         </div>
-        <div style={{ padding: "0 12px 12px" }}>
+        <div style={{ padding: "0 12px 12px", display: "flex", gap: 4, flexWrap: "wrap" }}>
+          <NavLink to="/settings/notifications" className="btn ghost sm">{t("nav.notifications")}</NavLink>
           <button className="btn ghost sm" onClick={signOut}>{t("nav.signOut")}</button>
         </div>
       </aside>
@@ -95,6 +97,7 @@ function Authed({ user, setUser }: { user: Me; setUser: (u: Me | null) => void }
         <Route element={<Shell />}>
           <Route index element={<Navigate to={projects[0] ? `/p/${projects[0].key}` : "/my"} replace />} />
           <Route path="my" element={<MyWork />} />
+          <Route path="settings/notifications" element={<MyNotifications />} />
           <Route path="p/:key/*" element={<ProjectView />} />
           <Route path="i/:issueKey" element={<IssuePage />} />
           <Route path="admin/*" element={<Admin />} />

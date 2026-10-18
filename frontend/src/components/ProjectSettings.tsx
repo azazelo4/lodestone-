@@ -5,6 +5,7 @@ import { useT } from "../i18n";
 import { BindingsEditor, roleName, useDirectoryProviders } from "../pages/Admin";
 import type { ProjectData } from "../pages/ProjectView";
 import { Avatar, StateDot, Toast, useOutside } from "./bits";
+import ChannelsEditor from "./ChannelsEditor";
 
 const CATS: Category[] = ["backlog", "todo", "in_progress", "done", "cancelled"];
 
@@ -136,6 +137,11 @@ export default function ProjectSettings({ data, reload }: { data: ProjectData; r
           </select>
           <button className="btn" disabled={!newState.trim()}>+</button>
         </form>
+      </section>}
+
+      {manage && <section>
+        <h3>{t("ntf.channels")}</h3>
+        <ChannelsEditor projectKey={project.key} />
       </section>}
       {toast && <Toast text={toast} onDone={() => setToast("")} />}
     </div>

@@ -1,6 +1,7 @@
 # Local demo: Lodestone + PostgreSQL + OpenLDAP with test users.
 #   docker compose up --build
 #   open http://localhost:8000  — log in as alice / alice-password (admin) or bob / bob-password
+#   e-mails land in Mailpit: http://localhost:8025
 services:
   db:
     image: postgres:16-alpine
@@ -24,11 +25,16 @@ services:
     volumes:
       - ./deploy/ldap/bootstrap.ldif:/container/service/slapd/assets/config/bootstrap/ldif/custom/50-bootstrap.ldif:ro
 
+  mail:                                         # catches all e-mail for the demo
+    image: axllent/mailpit:v1.21.8
+    ports: ["8025:8025"]
+
   app:
     build: .
     depends_on:
       db: {condition: service_healthy}
       ldap: {condition: service_started}
+      mail: {condition: service_started}
     ports: ["8000:8000"]
     environment:
       LODESTONE_DATABASE_URL: postgresql+psycopg://lodestone:lodestone@db:5432/lodestone
@@ -44,6 +50,10 @@ services:
       LODESTONE_LDAP_USER_FILTER: (uid={username})
       LODESTONE_LDAP_ALLOWED_GROUP: cn=lodestone-users,ou=groups,dc=example,dc=org
       LODESTONE_LDAP_ADMIN_GROUP: cn=lodestone-admins,ou=groups,dc=example,dc=org
+      LODESTONE_SMTP_HOST: mail
+      LODESTONE_SMTP_PORT: "1025"
+      LODESTONE_SMTP_SECURITY: none
+      LODESTONE_SMTP_FROM: Lodestone <lodestone@example.org>
     restart: unless-stopped
 
 volumes:

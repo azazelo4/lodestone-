@@ -1,0 +1,52 @@
+{{- if .Values.notifications.worker.separate }}
+# Sends e-mail and messenger notifications from the outbox table. Web pods stop sending (NOTIFY_WORKER=false).
+# Its own name label, so the web Deployment and the Service never select these pods.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "lodestone.fullname" . }}-worker
+  labels: {{- include "lodestone.labels" . | nindent 4 }}
+    app.kubernetes.io/component: worker
+spec:
+  replicas: {{ .Values.notifications.worker.replicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ .Chart.Name }}-worker
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ .Chart.Name }}-worker
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/component: worker
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext: {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: worker
+          image: {{ include "lodestone.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: ["worker"]
+          env: {{- include "lodestone.env" . | nindent 12 }}
+          envFrom:
+            - configMapRef: {name: {{ include "lodestone.fullname" . }}}
+          securityContext: {{- include "lodestone.containerSecurity" . | nindent 12 }}
+          resources:
+            requests: {cpu: 10m, memory: 96Mi}
+            limits: {memory: 256Mi}
+          volumeMounts:
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - name: tmp
+          emptyDir: {}
+      {{- with .Values.nodeSelector }}
+      nodeSelector: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations: {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

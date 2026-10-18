@@ -27,6 +27,8 @@ app.kubernetes.io/instance: {{ .Release.Name }}
   valueFrom: {secretKeyRef: {name: {{ include "lodestone.secretName" . }}, key: admin-password, optional: true}}
 - name: LODESTONE_OIDC_CLIENT_SECRET
   valueFrom: {secretKeyRef: {name: {{ include "lodestone.secretName" . }}, key: oidc-client-secret, optional: true}}
+- name: LODESTONE_SMTP_PASSWORD
+  valueFrom: {secretKeyRef: {name: {{ include "lodestone.secretName" . }}, key: smtp-password, optional: true}}
 - name: LODESTONE_ENCRYPTION_KEY
   valueFrom: {secretKeyRef: {name: {{ include "lodestone.secretName" . }}, key: encryption-key, optional: true}}
 - name: LODESTONE_SETUP_TOKEN

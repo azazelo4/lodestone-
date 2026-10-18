@@ -13,6 +13,7 @@ A self-hosted issue tracker for small engineering and ops teams. You sign in wit
 - **Single sign-on (OpenID Connect)** with Keycloak, Entra ID (Azure AD), ADFS, Google, GitLab or Okta: authorization code flow with PKCE, IdP groups for access and admin rights.
 - **Several sign-in methods at once**: local accounts, one or more LDAP/AD directories and SSO providers. A first-start wizard lets you pick them; later they are managed in Administration.
 - **Role-based access control**: roles are sets of permissions, builtin admin / member / viewer plus your own, global or per project, given to people or to directory groups.
+- **Notifications**: e-mails over SMTP to the people involved in an issue (assigned, @mentioned, commented, status changed), and posts to Slack, Mattermost, Rocket.Chat, Microsoft Teams, Discord, Telegram or any JSON webhook, for all projects or per project. Delivery goes through an outbox with retries, so a slow mail server never slows the UI.
 - **Projects with issue keys** (`OPS-42`), private or public.
 - **Issues** with:
   - sub-issues and epics;
@@ -45,7 +46,7 @@ Open http://localhost:8000. The compose file starts PostgreSQL and an OpenLDAP s
 | `mallory` | `mallory-password` | rejected: not in `lodestone-users` |
 | `admin` | `admin-password-1` | local break-glass admin |
 
-To load a sample project, run `docker compose exec app /entrypoint.sh seed`.
+To load a sample project, run `docker compose exec app /entrypoint.sh seed`. Notification e-mails for alice and bob are caught by Mailpit at http://localhost:8025.
 
 ## Configuration
 
@@ -93,6 +94,31 @@ A role is a named set of permissions. Global permissions: `users.manage`, `roles
 | `OIDC_SCOPES`, `OIDC_GROUPS_CLAIM` | `openid profile email`, `groups` | Dotted paths work: `realm_access.roles`. |
 | `OIDC_ALLOWED_GROUPS`, `OIDC_ADMIN_GROUPS` | empty | Comma-separated group names. |
 | `LOGIN_MAX_FAILURES` / `LOGIN_LOCK_MINUTES` | `5` / `5` | Brute-force lockout per username. |
+| `SMTP_HOST`, `SMTP_PORT` | empty, `587` | Initial mail server; later edited in Administration → Notifications. |
+| `SMTP_SECURITY` | `starttls` | `starttls`, `ssl` (port 465) or `none`. |
+| `SMTP_USERNAME` / `SMTP_PASSWORD` | empty | Leave empty for a relay without authentication. |
+| `SMTP_FROM` | empty | `Lodestone <tracker@corp.local>` |
+| `NOTIFY_LANG` | `en` | Language of notifications when the person or channel has not chosen one. |
+| `NOTIFY_WORKER` | `true` | Send notifications from the web process. Set `false` if you run `worker` separately. |
+| `WEBHOOK_ALLOW_PRIVATE` | `false` | Allow webhooks to private addresses (an internal Mattermost, a Telegram proxy). |
+| `WEBHOOK_TIMEOUT` | `10` | Seconds. |
+
+### Notifications
+
+**Administration → Notifications** holds the mail server (with a "Send test e-mail" button), messengers for all projects and a delivery log where failed messages can be retried. Project managers add their own messengers in the project settings. Everyone chooses what e-mails they get under **Notifications** in the sidebar.
+
+E-mail goes to the reporter, the assignees, earlier commenters and anyone mentioned as `@login`, never to the person who made the change, and only while they can still see the project. Messenger channels get every event they subscribe to. The webhook URL for each messenger:
+
+| Messenger | Where to get it |
+|---|---|
+| Slack | App → Incoming Webhooks |
+| Mattermost, Rocket.Chat | Integrations → Incoming webhook |
+| Microsoft Teams | Channel → Workflows → "Post to a channel when a webhook request is received" |
+| Discord | Channel settings → Integrations → Webhooks |
+| Telegram | A bot token from @BotFather and the chat id; add the bot to the group |
+| Other | Any URL that accepts JSON `{event, text, url, data}`; with a signing secret the body is signed in `X-Lodestone-Signature: sha256=<HMAC>` |
+
+Messages are written to the `notification_outbox` table in the same transaction as the change and sent in the background with retries after 1, 5, 30, 120 and 360 minutes. Several replicas can send at once. To run sending as its own Deployment, set `NOTIFY_WORKER=false` on the web pods and start the image with the `worker` command. Webhooks to private IP addresses are blocked unless `WEBHOOK_ALLOW_PRIVATE=true`, so a project manager cannot use them to probe the internal network.
 
 ### Active Directory example
 
@@ -126,7 +152,7 @@ The `existingSecret` Secret holds these keys:
 - `database-url`
 - `ldap-bind-password`
 - `admin-password` (optional)
-- `oidc-client-secret`, `encryption-key`, `setup-token` (optional)
+- `oidc-client-secret`, `encryption-key`, `setup-token`, `smtp-password` (optional)
 
 Migrations run in an init container. They are serialized with a PostgreSQL advisory lock, so several replicas can roll out at once.
 
@@ -172,7 +198,7 @@ The stack is FastAPI, SQLAlchemy 2, Alembic and ldap3 on the backend, and React 
 - [ ] Attachments (S3 / MinIO)
 - [ ] Sprint board and burndown
 - [ ] GitLab / GitHub integration: link MRs and commits by issue key
-- [ ] Notifications: e-mail, Teams, Telegram
+- [x] Notifications: e-mail and messenger webhooks
 - [ ] Personal API tokens and outgoing webhooks
 - [ ] Saved filters, issue templates, CSV / Excel import
 

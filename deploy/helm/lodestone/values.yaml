@@ -9,7 +9,7 @@ workers: 2              # uvicorn workers per pod
 
 # Session signing key and DB URL go to a Secret. Use existingSecret in production
 # (keys: secret-key, database-url, ldap-bind-password, admin-password, oidc-client-secret,
-#  encryption-key, setup-token; all but the first two are optional).
+#  encryption-key, setup-token, smtp-password; all but the first two are optional).
 existingSecret: ""
 secretKey: ""           # random 32+ chars; required when existingSecret is empty
 encryptionKey: ""       # encrypts provider secrets in the DB; empty = derived from secretKey
@@ -53,6 +53,22 @@ auth:
     groupsClaim: groups
     allowedGroups: ""   # comma-separated
     adminGroups: ""     # comma-separated
+
+# E-mail and messenger notifications. SMTP values are the initial settings; later they are edited in
+# Administration -> Notifications. Messenger webhooks are added in the UI.
+notifications:
+  lang: en              # en | ru, when a person or channel has not chosen one
+  smtp:
+    host: ""            # smtp.corp.local; empty = no e-mail until set in the UI
+    port: 587
+    security: starttls  # starttls | ssl | none
+    username: ""
+    password: ""        # goes to the Secret (key smtp-password)
+    from: ""            # Lodestone <tracker@corp.local>
+  allowPrivateWebhooks: false  # allow webhooks to private IPs (internal Mattermost, Telegram proxy)
+  worker:
+    separate: false     # true = a separate Deployment sends notifications; web pods stop doing it
+    replicas: 1
 
 ingress:
   enabled: true

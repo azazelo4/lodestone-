@@ -35,6 +35,18 @@ export interface ProviderIn { slug: string; type: ProviderType; name: string; en
 export interface Provider extends ProviderIn { id: string; position: number; secrets_set: string[]; redirect_uri: string | null }
 export interface TestResult { ok: boolean; message: string }
 export interface Binding { id: string; group: string; role: RoleBrief; provider: ProviderBrief | null; project_key: string | null }
+export type ChannelType = "slack" | "mattermost" | "rocketchat" | "teams" | "discord" | "telegram" | "generic";
+export interface ChannelIn {
+  name: string; type: ChannelType; enabled: boolean; events: string[]; lang: "en" | "ru";
+  config: Record<string, string>; secrets: Record<string, string>;
+}
+export interface Channel extends Omit<ChannelIn, "secrets"> { id: string; secrets_set: string[]; project_key: string | null }
+export interface Smtp { enabled: boolean; host: string; port: number; security: "none" | "starttls" | "ssl"; username: string; from_address: string; password_set: boolean }
+export interface NotifyPrefs { email_enabled: boolean; events: string[]; lang: "en" | "ru" | null }
+export interface OutboxRow {
+  id: number; kind: "email" | "webhook"; recipient: string; subject: string; status: "pending" | "sent" | "failed";
+  attempts: number; last_error: string | null; created_at: string; sent_at: string | null; next_attempt_at: string;
+}
 export interface BindingIn { group: string; role: string; provider?: string | null }
 export interface Issue {
   id: string; key: string; number: number; type: IssueType; title: string; priority: Priority; state: State;
@@ -135,6 +147,24 @@ export const api = {
   bindings: () => request<Binding[]>("GET", "/admin/group-bindings"),
   addBinding: (b: BindingIn) => request<Binding>("POST", "/admin/group-bindings", b),
   deleteBinding: (id: string) => request<void>("DELETE", `/admin/group-bindings/${id}`),
+
+  myNotifications: () => request<NotifyPrefs>("GET", "/me/notifications"),
+  setMyNotifications: (b: NotifyPrefs) => request<NotifyPrefs>("PUT", "/me/notifications", b),
+  smtp: () => request<Smtp>("GET", "/admin/notifications/smtp"),
+  setSmtp: (b: Omit<Smtp, "password_set"> & { password?: string | null }) => request<Smtp>("PUT", "/admin/notifications/smtp", b),
+  testSmtp: (to: string) => request<TestResult>("POST", "/admin/notifications/smtp/test", { to }),
+  outbox: (status?: string) => request<OutboxRow[]>("GET", `/admin/notifications/outbox${qs({ status, limit: "50" })}`),
+  retryOutbox: (id: number) => request<OutboxRow>("POST", `/admin/notifications/outbox/${id}/retry`),
+  channels: (projectKey?: string) =>
+    request<Channel[]>("GET", projectKey ? `/projects/${projectKey}/notification-channels` : "/admin/notification-channels"),
+  addChannel: (projectKey: string | undefined, b: ChannelIn) =>
+    request<Channel>("POST", projectKey ? `/projects/${projectKey}/notification-channels` : "/admin/notification-channels", b),
+  updateChannel: (projectKey: string | undefined, id: string, b: ChannelIn) =>
+    request<Channel>("PUT", `${projectKey ? `/projects/${projectKey}` : "/admin"}/notification-channels/${id}`, b),
+  deleteChannel: (projectKey: string | undefined, id: string) =>
+    request<void>("DELETE", `${projectKey ? `/projects/${projectKey}` : "/admin"}/notification-channels/${id}`),
+  testChannel: (projectKey: string | undefined, id: string) =>
+    request<TestResult>("POST", `${projectKey ? `/projects/${projectKey}` : "/admin"}/notification-channels/${id}/test`),
 
   allUsers: () => request<User[]>("GET", "/users/all"),
   createUser: (b: { username: string; display_name: string; email?: string; password: string; is_admin?: boolean }) =>
