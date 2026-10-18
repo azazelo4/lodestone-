@@ -8,7 +8,9 @@ data:
   LODESTONE_COOKIE_SECURE: "true"
   LODESTONE_AUTO_MIGRATE: "false"
   LODESTONE_WORKERS: {{ .Values.workers | quote }}
+  LODESTONE_AUTH_SYNC_ENV: {{ .Values.auth.syncFromValues | quote }}
   LODESTONE_LOCAL_AUTH_ENABLED: {{ .Values.auth.localEnabled | quote }}
+  LODESTONE_LOCAL_ADMINS_ONLY: {{ .Values.auth.localAdminsOnly | quote }}
   LODESTONE_PROJECT_CREATE: {{ .Values.auth.projectCreate | quote }}
   LODESTONE_ADMIN_USERNAME: {{ .Values.admin.username | quote }}
   LODESTONE_LDAP_ENABLED: {{ .Values.auth.ldap.enabled | quote }}
@@ -23,6 +25,14 @@ data:
   LODESTONE_LDAP_ALLOWED_GROUP: {{ .Values.auth.ldap.allowedGroup | quote }}
   LODESTONE_LDAP_ADMIN_GROUP: {{ .Values.auth.ldap.adminGroup | quote }}
   LODESTONE_LDAP_NESTED_GROUPS: {{ .Values.auth.ldap.nestedGroups | quote }}
+  LODESTONE_OIDC_ENABLED: {{ .Values.auth.oidc.enabled | quote }}
+  LODESTONE_OIDC_NAME: {{ .Values.auth.oidc.name | quote }}
+  LODESTONE_OIDC_ISSUER: {{ .Values.auth.oidc.issuer | quote }}
+  LODESTONE_OIDC_CLIENT_ID: {{ .Values.auth.oidc.clientId | quote }}
+  LODESTONE_OIDC_SCOPES: {{ .Values.auth.oidc.scopes | quote }}
+  LODESTONE_OIDC_GROUPS_CLAIM: {{ .Values.auth.oidc.groupsClaim | quote }}
+  LODESTONE_OIDC_ALLOWED_GROUPS: {{ .Values.auth.oidc.allowedGroups | quote }}
+  LODESTONE_OIDC_ADMIN_GROUPS: {{ .Values.auth.oidc.adminGroups | quote }}
   {{- if .Values.auth.ldap.caSecret }}
   LODESTONE_LDAP_CA_FILE: /etc/lodestone/ca/ca.crt
   {{- end }}

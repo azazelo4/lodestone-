@@ -13,6 +13,12 @@ export interface ProjectData {
   members: Member[];
   labels: Label[];
   canEdit: boolean;
+  can: (perm: string) => boolean;
+}
+
+export function projectData(project: Project, members: Member[], labels: Label[]): ProjectData {
+  const can = (perm: string) => project.my_permissions.includes(perm);
+  return { project, members, labels, canEdit: can("issues.edit"), can };
 }
 
 export default function ProjectView() {
@@ -31,7 +37,7 @@ export default function ProjectView() {
   const loadProject = useCallback(async () => {
     try {
       const [project, members, labels] = await Promise.all([api.project(key), api.members(key), api.labels(key)]);
-      setData({ project, members, labels, canEdit: project.my_role === "admin" || project.my_role === "member" });
+      setData(projectData(project, members, labels));
       setMissing(false);
     } catch {
       setMissing(true);
@@ -71,10 +77,10 @@ export default function ProjectView() {
         <nav className="tabs" aria-label="Views">
           <NavLink end to={`/p/${project.key}`} className={tab}>{t("view.board")}</NavLink>
           <NavLink to={`/p/${project.key}/list`} className={tab}>{t("view.list")}</NavLink>
-          {project.my_role === "admin" && <NavLink to={`/p/${project.key}/settings`} className={tab}>{t("view.settings")}</NavLink>}
+          {(data.can("project.manage") || data.can("members.manage")) && <NavLink to={`/p/${project.key}/settings`} className={tab}>{t("view.settings")}</NavLink>}
         </nav>
         <span className="spacer" />
-        {data.canEdit && <button className="btn primary" onClick={() => setNewIn(null)}>{t("issue.new")}</button>}
+        {data.can("issues.create") && <button className="btn primary" onClick={() => setNewIn(null)}>{t("issue.new")}</button>}
       </div>
       <Routes>
         <Route path="settings" element={<div className="content"><ProjectSettings data={data} reload={loadProject} /></div>} />

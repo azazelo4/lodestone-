@@ -8,18 +8,26 @@ replicaCount: 2
 workers: 2              # uvicorn workers per pod
 
 # Session signing key and DB URL go to a Secret. Use existingSecret in production
-# (keys: secret-key, database-url, ldap-bind-password, admin-password).
+# (keys: secret-key, database-url, ldap-bind-password, admin-password, oidc-client-secret,
+#  encryption-key, setup-token; all but the first two are optional).
 existingSecret: ""
 secretKey: ""           # random 32+ chars; required when existingSecret is empty
+encryptionKey: ""       # encrypts provider secrets in the DB; empty = derived from secretKey
+setupToken: ""          # first-start wizard token; empty = random, printed to the pod log
 databaseUrl: ""         # postgresql+psycopg://user:pass@host:5432/lodestone
 
 admin:
   username: admin       # break-glass local account; leave password empty to disable
   password: ""
 
+# Sign-in providers. With admin.password, LDAP or OIDC set here the setup wizard is skipped and these values
+# become the initial providers; later they are edited in Administration -> Sign-in.
+# syncFromValues: true re-applies them on every start (GitOps), overwriting UI edits of these providers.
 auth:
+  syncFromValues: false
   localEnabled: true
-  projectCreate: all    # all | admins
+  localAdminsOnly: false  # local accounts only for administrators (break-glass)
+  projectCreate: all    # all | admins; initial permissions of the default "user" role
   ldap:
     enabled: false
     url: ldaps://dc01.corp.local:636
@@ -35,6 +43,16 @@ auth:
     allowedGroup: ""    # CN=Lodestone Users,OU=Groups,DC=corp,DC=local
     adminGroup: ""      # CN=Lodestone Admins,OU=Groups,DC=corp,DC=local
     nestedGroups: true  # AD transitive membership
+  oidc:                 # SSO: Keycloak, Entra ID, ADFS, Google, GitLab, Okta...
+    enabled: false
+    name: SSO           # button text: "Sign in with <name>"
+    issuer: ""          # https://keycloak.corp.local/realms/corp
+    clientId: lodestone
+    clientSecret: ""    # register redirect URI https://<host>/api/auth/oidc/sso/callback
+    scopes: openid profile email
+    groupsClaim: groups
+    allowedGroups: ""   # comma-separated
+    adminGroups: ""     # comma-separated
 
 ingress:
   enabled: true

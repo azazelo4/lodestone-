@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { useSession } from "../App";
-import { api, ApiError, Category, Role, UserBrief } from "../api";
+import { api, ApiError, Binding, Category, Role, UserBrief } from "../api";
 import { useT } from "../i18n";
+import { BindingsEditor, roleName, useDirectoryProviders } from "../pages/Admin";
 import type { ProjectData } from "../pages/ProjectView";
 import { Avatar, StateDot, Toast, useOutside } from "./bits";
 
-const ROLES: Role[] = ["admin", "member", "viewer"];
 const CATS: Category[] = ["backlog", "todo", "in_progress", "done", "cancelled"];
 
 function UserSearch({ exclude, onPick }: { exclude: string[]; onPick: (u: UserBrief) => void }) {
@@ -47,6 +47,15 @@ export default function ProjectSettings({ data, reload }: { data: ProjectData; r
   const [newCat, setNewCat] = useState<Category>("todo");
   const [error, setError] = useState("");
   const [toast, setToast] = useState("");
+  const [roles, setRoles] = useState<Role[]>([]);
+  const [bindings, setBindings] = useState<Binding[]>([]);
+  const providers = useDirectoryProviders();
+  const manage = data.can("project.manage");
+  const people = data.can("members.manage");
+  useEffect(() => {
+    api.roles("project").then(setRoles).catch(() => {});
+    api.projectBindings(project.key).then(setBindings).catch(() => {});
+  }, [project.key]);
 
   async function run(fn: () => Promise<unknown>, ok?: string) {
     setError("");
@@ -62,7 +71,7 @@ export default function ProjectSettings({ data, reload }: { data: ProjectData; r
   return (
     <div className="page settings-grid">
       {error && <div className="banner" role="alert">{error}</div>}
-      <section>
+      {manage && <section>
         <h3>{t("project.general")}</h3>
         <div style={{ display: "grid", gap: 12, maxWidth: 520 }}>
           <label className="field"><span>{t("project.name")}</span>
@@ -80,9 +89,9 @@ export default function ProjectSettings({ data, reload }: { data: ProjectData; r
             }, t("project.saved"))}>{t("project.save")}</button>
           </div>
         </div>
-      </section>
+      </section>}
 
-      <section>
+      {people && <section>
         <h3>{t("project.members")} <span className="hint num">{members.length}</span></h3>
         <UserSearch exclude={members.map((m) => m.user.id)} onPick={(u) => run(() => api.addMember(project.key, u.id, "member"))} />
         <div style={{ marginTop: 8 }}>
@@ -90,17 +99,24 @@ export default function ProjectSettings({ data, reload }: { data: ProjectData; r
             <div className="member-row" key={m.user.id}>
               <Avatar user={m.user} large />
               <div className="name"><div>{m.user.display_name}</div><div className="hint">{m.user.username}</div></div>
-              <select className="select" value={m.role} aria-label={`${m.user.display_name} role`}
-                      onChange={(e) => run(() => api.setRole(project.key, m.user.id, e.target.value as Role))}>
-                {ROLES.map((r) => <option key={r} value={r}>{t(`role.${r}`)}</option>)}
+              <select className="select" value={m.role.key} aria-label={`${m.user.display_name} role`}
+                      onChange={(e) => run(() => api.setRole(project.key, m.user.id, e.target.value))}>
+                {roles.map((r) => <option key={r.key} value={r.key}>{roleName(t, r)}</option>)}
               </select>
               <button className="btn ghost sm danger" onClick={() => run(() => api.removeMember(project.key, m.user.id))}>{t("project.remove")}</button>
             </div>
           ))}
         </div>
-      </section>
+      </section>}
 
-      <section>
+      {people && <section>
+        <h3>{t("project.groups")}</h3>
+        <BindingsEditor rows={bindings} roles={roles} providers={providers}
+                        onAdd={(b) => run(async () => { await api.addProjectBinding(project.key, b); setBindings(await api.projectBindings(project.key)); })}
+                        onDelete={(id) => run(async () => { await api.deleteProjectBinding(project.key, id); setBindings(await api.projectBindings(project.key)); })} />
+      </section>}
+
+      {manage && <section>
         <h3>{t("project.states")}</h3>
         {project.states.map((s) => (
           <div className="state-row" key={s.id}>
@@ -120,7 +136,7 @@ export default function ProjectSettings({ data, reload }: { data: ProjectData; r
           </select>
           <button className="btn" disabled={!newState.trim()}>+</button>
         </form>
-      </section>
+      </section>}
       {toast && <Toast text={toast} onDone={() => setToast("")} />}
     </div>
   );

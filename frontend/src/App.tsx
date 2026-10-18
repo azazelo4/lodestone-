@@ -1,16 +1,18 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { BrowserRouter, Navigate, NavLink, Outlet, Route, Routes, useNavigate } from "react-router-dom";
-import { api, Project, setUnauthorizedHandler, User } from "./api";
+import { api, AuthConfig, Me, Project, setUnauthorizedHandler } from "./api";
 import { Avatar, Logo } from "./components/bits";
 import NewProject from "./components/NewProject";
 import { detectLang, I18n, Lang, translator, useT } from "./i18n";
+import Admin, { ADMIN_PERMS } from "./pages/Admin";
 import IssuePage from "./pages/IssuePage";
 import Login from "./pages/Login";
 import MyWork from "./pages/MyWork";
 import ProjectView from "./pages/ProjectView";
+import Setup from "./pages/Setup";
 
 interface Session {
-  user: User;
+  user: Me;
   projects: Project[];
   reloadProjects: () => Promise<void>;
   signOut: () => Promise<void>;
@@ -33,9 +35,14 @@ function Shell() {
         <div className="brand"><Logo /> {t("app.name")}</div>
         <nav aria-label="Main">
           <NavLink to="/my" className={({ isActive }) => `navlink${isActive ? " active" : ""}`}>{t("nav.my")}</NavLink>
+          {ADMIN_PERMS.some((p) => user.permissions.includes(p)) && (
+            <NavLink to="/admin" className={({ isActive }) => `navlink${isActive ? " active" : ""}`}>{t("nav.admin")}</NavLink>
+          )}
           <div className="group">
             <span>{t("nav.projects")}</span>
-            <button className="btn ghost sm" onClick={() => setCreating(true)} aria-label={t("nav.newProject")} title={t("nav.newProject")}>+</button>
+            {user.permissions.includes("projects.create") && (
+              <button className="btn ghost sm" onClick={() => setCreating(true)} aria-label={t("nav.newProject")} title={t("nav.newProject")}>+</button>
+            )}
           </div>
           {projects.length === 0 && <div className="hint" style={{ padding: "4px 8px" }}>{t("nav.noProjects")}</div>}
           {projects.map((p) => (
@@ -70,7 +77,7 @@ function Shell() {
   );
 }
 
-function Authed({ user, setUser }: { user: User; setUser: (u: User | null) => void }) {
+function Authed({ user, setUser }: { user: Me; setUser: (u: Me | null) => void }) {
   const [projects, setProjects] = useState<Project[] | null>(null);
   const reloadProjects = useCallback(async () => setProjects(await api.projects()), []);
   useEffect(() => {
@@ -90,6 +97,7 @@ function Authed({ user, setUser }: { user: User; setUser: (u: User | null) => vo
           <Route path="my" element={<MyWork />} />
           <Route path="p/:key/*" element={<ProjectView />} />
           <Route path="i/:issueKey" element={<IssuePage />} />
+          <Route path="admin/*" element={<Admin />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>
@@ -99,7 +107,8 @@ function Authed({ user, setUser }: { user: User; setUser: (u: User | null) => vo
 
 export default function App() {
   const [lang, setLangState] = useState<Lang>(detectLang());
-  const [user, setUser] = useState<User | null | undefined>(undefined);
+  const [user, setUser] = useState<Me | null | undefined>(undefined);
+  const [config, setConfig] = useState<AuthConfig | null>(null);
   const i18n = useMemo(() => ({
     lang,
     t: translator(lang),
@@ -112,14 +121,24 @@ export default function App() {
 
   useEffect(() => {
     document.documentElement.lang = lang;
-    setUnauthorizedHandler(() => setUser(null));
-    api.me().then(setUser).catch(() => setUser(null));
   }, [lang]);
+  useEffect(() => {
+    setUnauthorizedHandler(() => setUser(null));
+    api.authConfig().then(setConfig).catch(() => setConfig({ setup_required: false, password: true, password_providers: [], sso: [] }));
+    api.me().then(setUser).catch(() => setUser(null));
+  }, []);
+
+  let body = null;
+  if (config && user !== undefined) {
+    if (config.setup_required && !user) body = <Setup onDone={(u) => { setConfig({ ...config, setup_required: false }); setUser(u); }} />;
+    else if (!user) body = <Login config={config} onLogin={setUser} />;
+    else body = <Authed user={user} setUser={setUser} />;
+  }
 
   return (
     <I18n.Provider value={i18n}>
       <BrowserRouter>
-        {user === undefined ? null : user === null ? <Login onLogin={setUser} /> : <Authed user={user} setUser={setUser} />}
+        {body}
       </BrowserRouter>
     </I18n.Provider>
   );

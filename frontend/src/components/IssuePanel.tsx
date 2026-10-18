@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useSession } from "../App";
 import {
-  Activity, api, ApiError, Comment, IssueDetail, IssueType, Label, Member, Priority, Project,
+  Activity, api, ApiError, Comment, IssueDetail, IssueType, Priority,
 } from "../api";
+import { ProjectData, projectData } from "../pages/ProjectView";
 import { TKey, useT } from "../i18n";
 import {
   Avatar, Avatars, DueDate, Markdown, MultiPicker, PriorityIcon, StateDot, timeAgo, Toast,
@@ -11,7 +12,7 @@ import {
 const PRIORITIES: Priority[] = ["urgent", "high", "medium", "low", "none"];
 const TYPES: IssueType[] = ["task", "bug", "story", "epic"];
 
-interface Ctx { project: Project; members: Member[]; labels: Label[]; canEdit: boolean }
+type Ctx = ProjectData;
 
 function AutoTitle({ value, onSave, disabled }: { value: string; onSave: (v: string) => void; disabled: boolean }) {
   const [v, setV] = useState(value);
@@ -145,7 +146,7 @@ export function IssueBody({ issueKey, onChanged, onOpen, onDeleted, header }: {
         api.project(i.project_key), api.members(i.project_key), api.labels(i.project_key),
         api.comments(issueKey), api.activity(issueKey),
       ]);
-      setCtx({ project, members, labels, canEdit: project.my_role === "admin" || project.my_role === "member" });
+      setCtx(projectData(project, members, labels));
       setComments(cs);
       setActs(as);
     } catch (e) {
@@ -190,7 +191,7 @@ export function IssueBody({ issueKey, onChanged, onOpen, onDeleted, header }: {
     }
   }
 
-  const canDelete = !!issue && !!ctx && (ctx.project.my_role === "admin" || issue.reporter?.id === user.id);
+  const canDelete = !!issue && !!ctx && (ctx.can("issues.delete") || (issue.reporter?.id === user.id && ctx.canEdit));
   const actions = {
     canDelete,
     copy: () => {
@@ -210,7 +211,7 @@ export function IssueBody({ issueKey, onChanged, onOpen, onDeleted, header }: {
   const memberUsers = ctx.members.map((m) => m.user);
   const feed = [
     ...comments.map((c) => ({ at: c.created_at, el: (
-      <CommentItem key={`c${c.id}`} c={c} canModify={c.author?.id === user.id || ctx.project.my_role === "admin"}
+      <CommentItem key={`c${c.id}`} c={c} canModify={c.author?.id === user.id || ctx.can("comments.moderate")}
                    onEdit={async (b) => { const u = await api.editComment(c.id, b); setComments((cs) => cs.map((x) => (x.id === c.id ? u : x))); }}
                    onDelete={async () => { await api.deleteComment(c.id); setComments((cs) => cs.filter((x) => x.id !== c.id)); }} />
     ) })),
@@ -248,7 +249,7 @@ export function IssueBody({ issueKey, onChanged, onOpen, onDeleted, header }: {
               <Avatars users={s.assignees} />
             </div>
           ))}
-          {!ro && (
+          {ctx.can("issues.create") && (
             <form onSubmit={(e) => { e.preventDefault(); addSubtask(); }} style={{ display: "flex", gap: 8, marginTop: 6 }}>
               <input className="input" placeholder={t("issue.addSubtask")} value={newSub} onChange={(e) => setNewSub(e.target.value)} />
               <button className="btn" disabled={!newSub.trim()}>+</button>
@@ -257,7 +258,7 @@ export function IssueBody({ issueKey, onChanged, onOpen, onDeleted, header }: {
 
           <div className="section-h">{t("issue.comments")} <span className="n num">{comments.length || ""}</span></div>
           <div className="feed">{feed.map((f) => f.el)}</div>
-          {!ro && (
+          {ctx.can("comments.create") && (
             <div className="composer">
               <textarea className="textarea" placeholder={t("issue.commentPh")} value={draft} onChange={(e) => setDraft(e.target.value)}
                         onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) sendComment(); }} />

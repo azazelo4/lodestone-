@@ -86,7 +86,7 @@ export default function Board({ data, issues, setIssues, onOpen, onAdd }: {
               <StateDot category={s.category} />
               <span>{s.name}</span>
               <span className="n num">{list.length}</span>
-              {data.canEdit && <button className="btn ghost sm" onClick={() => onAdd(s.id)} title={t("board.add")} aria-label={t("board.add")}>+</button>}
+              {data.can("issues.create") && <button className="btn ghost sm" onClick={() => onAdd(s.id)} title={t("board.add")} aria-label={t("board.add")}>+</button>}
             </div>
             <div className={`col-body${over?.state === s.id ? " over" : ""}`}
                  onDragOver={(e) => { if (!dragKey) return; e.preventDefault(); setOver({ state: s.id, index: indexAt(e, e.currentTarget) }); }}
