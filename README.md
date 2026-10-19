@@ -24,6 +24,8 @@ A self-hosted issue tracker for small engineering and ops teams. You sign in wit
 - **Cycles**: time boxes of one or two weeks with a burndown, by issue count or by estimate. Open cycles cannot overlap; completing a cycle moves its unfinished issues to the next one.
 - **Modules**: a feature or part of the system with a status, a lead and a target date. They group issues across cycles, and an issue can be in several.
 - **Progress analytics** per project: cumulative flow by status, created vs completed per week, lead and cycle time (median and 85th percentile), workload per person, open issues by priority. Every chart has a table view.
+- **Documentation** per project: Markdown pages in a tree, with preview, search by title and links between pages.
+- **Import from Jira, Plane and Confluence**: projects with issues, statuses, sprints, components or modules, epics, sub-tasks and comments; Confluence spaces become project documentation. Running an import again updates what it brought in before.
 - **Custom statuses** per project. Each status maps to a fixed category (backlog, todo, in progress, done, cancelled), so metrics keep working whatever names a team picks.
 - **Analytics-ready schema.** The `analytics.*` views give lead time, cycle time, age, overdue flags and state transitions to Power BI, Metabase or Grafana. No ETL needed.
 - **REST API** with OpenAPI docs at `/api/docs`. It accepts the session cookie or a `Bearer` token.
@@ -123,6 +125,23 @@ E-mail goes to the reporter, the assignees, earlier commenters and anyone mentio
 
 Messages are written to the `notification_outbox` table in the same transaction as the change and sent in the background with retries after 1, 5, 30, 120 and 360 minutes. Several replicas can send at once. To run sending as its own Deployment, set `NOTIFY_WORKER=false` on the web pods and start the image with the `worker` command. Webhooks to private IP addresses are blocked unless `WEBHOOK_ALLOW_PRIVATE=true`, so a project manager cannot use them to probe the internal network.
 
+### Import from Jira, Plane and Confluence
+
+**Administration → Import** (permission `imports.run`, administrators only by default). Pick the source, enter its address and credentials, load the list of projects or spaces, and choose a new or an existing Lodestone project. The import runs in the background; the list below the form shows progress, what was created and the log.
+
+| Source | Address | Credentials | What comes over |
+|---|---|---|---|
+| Jira Cloud | `https://acme.atlassian.net` | e-mail + API token | issues, statuses, priorities, labels, assignees, sprints → cycles, components → modules, epics and sub-tasks → parents, story points → estimate, comments |
+| Jira Server / Data Center | `https://jira.corp.local` | login + password, or only a personal access token | the same; descriptions in wiki markup are converted to Markdown |
+| Plane | `https://plane.corp.local` + workspace slug | API key | states, labels, work items, cycles, modules, parents, comments |
+| Confluence Cloud | `https://acme.atlassian.net/wiki` | e-mail + API token | the page tree of a space with text, tables, code blocks and links between pages |
+| Confluence Server / Data Center | `https://wiki.corp.local` | login + password, or a personal access token | the same |
+
+- People are matched by e-mail, then by login, and become members of the project. Issues and comments of people who have no Lodestone account are kept, with their name in the text.
+- Every issue and page gets a link back to the original. Running the same import again updates titles, descriptions, statuses and comments instead of creating copies (the `import_links` table remembers what became what).
+- Not imported: attachments and images (a placeholder with the file name stays), worklogs, change history, Plane pages (they are not in Plane's public API).
+- Credentials are stored encrypted only while the import runs and are deleted when it ends. Imports reach any address the server can, internal ones included, which is why the permission is for administrators.
+
 ### Active Directory example
 
 ```env
@@ -206,6 +225,7 @@ The stack is FastAPI, SQLAlchemy 2, Alembic and ldap3 on the backend, and React 
 - [ ] GitLab / GitHub integration: link MRs and commits by issue key
 - [x] Notifications: e-mail and messenger webhooks
 - [ ] Personal API tokens and outgoing webhooks
+- [x] Project documentation, import from Jira, Plane and Confluence
 - [ ] Saved filters, issue templates, CSV / Excel import
 
 ## License

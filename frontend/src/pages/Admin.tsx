@@ -8,8 +8,9 @@ import { Modal, Toast } from "../components/bits";
 import ChannelsEditor from "../components/ChannelsEditor";
 import ProviderForm, { emptyProvider } from "../components/ProviderForm";
 import { TKey, useT } from "../i18n";
+import Imports from "./Imports";
 
-export const ADMIN_PERMS = ["auth.manage", "users.manage", "roles.manage", "notifications.manage"];
+export const ADMIN_PERMS = ["auth.manage", "users.manage", "roles.manage", "notifications.manage", "imports.run"];
 
 export function roleName(t: (k: TKey) => string, r: RoleBrief & { builtin?: boolean }) {
   return ["admin", "member", "viewer", "user"].includes(r.key) ? t(`role.${r.key}` as TKey) : r.name;
@@ -516,6 +517,7 @@ export default function Admin() {
     { path: "roles", label: t("admin.tab.roles"), ok: can("roles.manage"), el: <Roles /> },
     { path: "groups", label: t("admin.tab.groups"), ok: can("roles.manage"), el: <Groups /> },
     { path: "notifications", label: t("admin.tab.notifications"), ok: can("notifications.manage"), el: <Notifications /> },
+    { path: "import", label: t("admin.tab.import"), ok: can("imports.run"), el: <Imports /> },
   ].filter((x) => x.ok);
   if (!tabs.length) return <Navigate to="/" replace />;
   const tab = ({ isActive }: { isActive: boolean }) => (isActive ? "active" : "");

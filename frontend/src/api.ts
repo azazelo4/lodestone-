@@ -47,6 +47,18 @@ export interface ProjectAnalytics {
   priority: Record<Priority, number>;
   flow: ({ date: string } & Record<Category, number>)[];
 }
+export interface PageBrief { id: string; parent_id: string | null; title: string; position: number; updated_at: string }
+export interface Page extends PageBrief { body: string; created_at: string; updated_by: UserBrief | null }
+export type ImportKind = "jira" | "plane" | "confluence";
+export interface ImportSource { source: ImportKind; url: string; workspace: string; username: string; token: string }
+export interface ImportIn extends ImportSource { remote: string; target_key: string; target_name: string; include_comments: boolean }
+export interface RemoteProject { id: string; key: string; name: string }
+export interface ImportJob {
+  id: string; source: ImportKind; status: "queued" | "running" | "done" | "failed";
+  params: { url: string; workspace?: string; remote: string; include_comments?: boolean };
+  stats: Record<string, number> & { unmatched_users?: string[] }; log: string; error: string | null;
+  project_key: string | null; created_by: UserBrief | null; created_at: string; started_at: string | null; finished_at: string | null;
+}
 export interface Project {
   id: string; key: string; name: string; description: string; is_private: boolean; archived: boolean;
   lead: UserBrief | null; states: State[]; my_role: string | null; my_permissions: string[]; open_issues: number;
@@ -245,6 +257,15 @@ export const api = {
   patchModule: (key: string, id: string, b: Partial<ModuleIn>) => request<Module>("PATCH", `/projects/${key}/modules/${id}`, b),
   deleteModule: (key: string, id: string) => request<void>("DELETE", `/projects/${key}/modules/${id}`),
   moduleProgress: (key: string, id: string) => request<ProgressDetail>("GET", `/projects/${key}/modules/${id}/progress`),
+  pages: (key: string) => request<PageBrief[]>("GET", `/projects/${key}/pages`),
+  page: (key: string, id: string) => request<Page>("GET", `/projects/${key}/pages/${id}`),
+  addPage: (key: string, b: { title: string; body: string; parent_id: string | null }) => request<Page>("POST", `/projects/${key}/pages`, b),
+  patchPage: (key: string, id: string, b: Partial<{ title: string; body: string; parent_id: string | null; position: number }>) =>
+    request<Page>("PATCH", `/projects/${key}/pages/${id}`, b),
+  deletePage: (key: string, id: string) => request<void>("DELETE", `/projects/${key}/pages/${id}`),
+  importRemote: (b: ImportSource) => request<RemoteProject[]>("POST", "/imports/remote", b),
+  startImport: (b: ImportIn) => request<ImportJob>("POST", "/imports", b),
+  imports: () => request<ImportJob[]>("GET", "/imports"),
   analytics: (key: string, weeks: number) => request<ProjectAnalytics>("GET", `/projects/${key}/analytics?weeks=${weeks}`),
 
   issues: (key: string, f: IssueFilter = {}) =>
