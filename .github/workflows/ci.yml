@@ -63,6 +63,7 @@ jobs:
           ARGS="--set secretKey=ci-secret-key-0123456789 --set databaseUrl=postgresql+psycopg://u:p@db/lodestone"
           helm lint deploy/helm/lodestone $ARGS
           helm template ci deploy/helm/lodestone $ARGS --set auth.ldap.enabled=true --set auth.ldap.caSecret=ca > /dev/null
+          helm lint deploy/helm/lodestone -f deploy/examples/values-prod.yaml
 
   image:
     needs: [backend, frontend, helm]

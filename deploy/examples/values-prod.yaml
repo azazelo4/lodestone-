@@ -1,0 +1,61 @@
+# Example values for a production install: Active Directory sign-in, optional Keycloak SSO,
+# corporate SMTP, TLS from cert-manager. Secrets are NOT here: they live in the "lodestone" Secret
+# (see docs/deploy-kubernetes.md, step 5). Copy this file, replace every corp.local value.
+#
+#   helm upgrade --install lodestone deploy/helm/lodestone -n lodestone -f values-prod.yaml
+
+image:
+  repository: ghcr.io/OWNER/lodestone   # or harbor.corp.local/tools/lodestone
+  tag: "0.1.0"
+imagePullSecrets: []                    # [{name: ghcr}] for a private registry
+
+replicaCount: 2
+workers: 2
+existingSecret: lodestone
+
+admin:
+  username: admin                       # break-glass account; its password is admin-password in the Secret
+
+auth:
+  localAdminsOnly: true                 # everyone except administrators signs in through AD or SSO
+  projectCreate: all
+  ldap:
+    enabled: true
+    url: ldaps://dc01.corp.local:636
+    caSecret: corp-ca                   # Secret with ca.crt; remove if the DC certificate is publicly trusted
+    bindDn: CN=svc-lodestone,OU=Service Accounts,DC=corp,DC=local
+    userBase: OU=Users,DC=corp,DC=local
+    userFilter: (sAMAccountName={username})
+    allowedGroup: CN=Lodestone Users,OU=Groups,DC=corp,DC=local
+    adminGroup: CN=Lodestone Admins,OU=Groups,DC=corp,DC=local
+    nestedGroups: true
+  oidc:
+    enabled: false                      # true + oidc-client-secret in the Secret to add a "Sign in with SSO" button
+    name: Keycloak
+    issuer: https://keycloak.corp.local/realms/corp
+    clientId: lodestone
+
+notifications:
+  lang: ru
+  smtp:
+    host: smtp.corp.local
+    port: 587
+    security: starttls
+    username: svc-lodestone
+    from: Lodestone <tracker@corp.local>
+  allowPrivateWebhooks: true            # messengers inside the corporate network (Mattermost, Rocket.Chat)
+
+ingress:
+  enabled: true
+  className: nginx
+  host: tracker.corp.local
+  annotations:
+    cert-manager.io/cluster-issuer: corp-ca-issuer
+    nginx.ingress.kubernetes.io/proxy-body-size: 10m
+  tls:
+    - secretName: lodestone-tls
+      hosts: [tracker.corp.local]
+
+resources:
+  requests: {cpu: 100m, memory: 256Mi}
+  limits: {memory: 768Mi}

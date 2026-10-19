@@ -160,6 +160,8 @@ The service account only needs read access to users and groups. User passwords g
 
 ## Kubernetes (Helm)
 
+Step-by-step guide: [docs/deploy-kubernetes.md](docs/deploy-kubernetes.md) (на русском: [docs/deploy-kubernetes.ru.md](docs/deploy-kubernetes.ru.md)). An example production values file is in [deploy/examples/values-prod.yaml](deploy/examples/values-prod.yaml). In short:
+
 ```bash
 helm install lodestone deploy/helm/lodestone \
   --set image.repository=ghcr.io/<you>/lodestone \
