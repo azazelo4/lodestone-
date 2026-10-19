@@ -286,6 +286,17 @@ class SprintPatch(BaseModel):
     closed: bool | None = None
 
 
+class Progress(BaseModel):
+    total: int = 0
+    scope: int = 0
+    done: int = 0
+    percent: int = 0
+    by_category: dict[str, int] = {}
+    points_scope: float = 0
+    points_done: float = 0
+    points_percent: int = 0
+
+
 class SprintOut(ORM):
     id: uuid.UUID
     name: str
@@ -293,6 +304,59 @@ class SprintOut(ORM):
     start_date: date | None
     end_date: date | None
     closed: bool
+    closed_at: datetime | None = None
+    status: str = "draft"  # draft (no dates) | upcoming | active | completed
+    progress: Progress = Progress()
+
+
+class SprintComplete(BaseModel):
+    move_to: uuid.UUID | None = None  # unfinished issues go to this cycle, or to no cycle
+
+
+class ModuleIn(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    description: str = ""
+    status: str = Field(default="planned", pattern=r"^(backlog|planned|in_progress|paused|completed|cancelled)$")
+    lead_id: uuid.UUID | None = None
+    start_date: date | None = None
+    target_date: date | None = None
+
+
+class ModulePatch(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    description: str | None = None
+    status: str | None = Field(default=None, pattern=r"^(backlog|planned|in_progress|paused|completed|cancelled)$")
+    lead_id: uuid.UUID | None = None
+    start_date: date | None = None
+    target_date: date | None = None
+
+
+class ModuleOut(ORM):
+    id: uuid.UUID
+    name: str
+    description: str
+    status: str
+    lead: UserBrief | None
+    start_date: date | None
+    target_date: date | None
+    created_at: datetime
+    progress: Progress = Progress()
+
+
+class BurnPoint(BaseModel):
+    date: date
+    scope: int | None
+    done: int | None
+    points_scope: float | None
+    points_done: float | None
+
+
+class ProgressDetail(BaseModel):
+    progress: Progress
+    start: date
+    end: date
+    burndown: list[BurnPoint]
+    people: list[dict]
 
 
 # ---------- issues
@@ -304,6 +368,7 @@ class IssueIn(BaseModel):
     priority: Priority = Priority.none
     assignee_ids: list[uuid.UUID] = []
     label_ids: list[uuid.UUID] = []
+    module_ids: list[uuid.UUID] = []
     parent_key: str | None = None
     sprint_id: uuid.UUID | None = None
     start_date: date | None = None
@@ -321,6 +386,7 @@ class IssuePatch(BaseModel):
     priority: Priority | None = None
     assignee_ids: list[uuid.UUID] | None = None
     label_ids: list[uuid.UUID] | None = None
+    module_ids: list[uuid.UUID] | None = None
     parent_key: str | None = None
     sprint_id: uuid.UUID | None = None
     start_date: date | None = None
@@ -341,6 +407,7 @@ class IssueOut(ORM):
     labels: list[LabelOut]
     parent_key: str | None = None
     sprint_id: uuid.UUID | None
+    module_ids: list[uuid.UUID] = []
     start_date: date | None
     due_date: date | None
     estimate: float | None

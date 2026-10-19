@@ -16,7 +16,6 @@ from ..models import (
     Project,
     ProjectMember,
     Role,
-    Sprint,
     State,
     User,
 )
@@ -31,9 +30,6 @@ from ..schemas import (
     ProjectDetail,
     ProjectIn,
     ProjectPatch,
-    SprintIn,
-    SprintOut,
-    SprintPatch,
     StateIn,
     StateOut,
     StatePatch,
@@ -277,35 +273,3 @@ def add_label(key: str, body: LabelIn, db: Session = Depends(get_db), user: User
     db.add(lb)
     db.commit()
     return lb
-
-
-# ---------- sprints
-@router.get("/{key}/sprints", response_model=list[SprintOut])
-def sprints(key: str, db: Session = Depends(get_db), user: User = Depends(current_user)):
-    p, _ = project_for(db, key, user)
-    return db.scalars(select(Sprint).where(Sprint.project_id == p.id)
-                      .order_by(Sprint.closed, Sprint.start_date.nulls_last(), Sprint.name)).all()
-
-
-@router.post("/{key}/sprints", response_model=SprintOut, status_code=201)
-def add_sprint(key: str, body: SprintIn, db: Session = Depends(get_db), user: User = Depends(current_user)):
-    p, _ = project_for(db, key, user, rbac.SPRINTS_MANAGE)
-    if body.start_date and body.end_date and body.end_date < body.start_date:
-        raise HTTPException(422, "Sprint ends before it starts")
-    sp = Sprint(project_id=p.id, **body.model_dump())
-    db.add(sp)
-    db.commit()
-    return sp
-
-
-@router.patch("/{key}/sprints/{sprint_id}", response_model=SprintOut)
-def patch_sprint(key: str, sprint_id: uuid.UUID, body: SprintPatch, db: Session = Depends(get_db),
-                 user: User = Depends(current_user)):
-    p, _ = project_for(db, key, user, rbac.SPRINTS_MANAGE)
-    sp = db.get(Sprint, sprint_id)
-    if not sp or sp.project_id != p.id:
-        raise HTTPException(404, "Sprint not found")
-    for k, v in body.model_dump(exclude_unset=True).items():
-        setattr(sp, k, v)
-    db.commit()
-    return sp

@@ -13,7 +13,7 @@ from . import delivery, providers
 from .config import get_settings
 from .db import engine, session_factory
 from .models import User, utcnow
-from .routers import admin, auth, issues, notifications, projects, setup, users
+from .routers import admin, auth, issues, notifications, planning, projects, setup, users
 from .security import hash_password
 
 log = logging.getLogger("lodestone")
@@ -63,7 +63,7 @@ app = FastAPI(title="Lodestone", version="0.1.0", lifespan=lifespan, docs_url="/
               openapi_url="/api/openapi.json", redoc_url=None)
 
 for r in (auth.router, setup.router, admin.router, users.router, projects.router, issues.router,
-          notifications.router):
+          notifications.router, planning.router):
     app.include_router(r)
 
 

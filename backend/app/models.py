@@ -4,6 +4,7 @@ from datetime import date, datetime, timezone
 
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     Column,
     Date,
     DateTime,
@@ -187,6 +188,8 @@ class Label(Base):
 
 
 class Sprint(Base):
+    """A cycle (time box). Called "cycle" in the UI; the table keeps its iteration-1 name."""
+
     __tablename__ = "sprints"
     id: Mapped[uuid.UUID] = uuid_pk()
     project_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), index=True)
@@ -195,12 +198,41 @@ class Sprint(Base):
     start_date: Mapped[date | None] = mapped_column(Date)
     end_date: Mapped[date | None] = mapped_column(Date)
     closed: Mapped[bool] = mapped_column(Boolean, default=False)
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+MODULE_STATUSES = ["backlog", "planned", "in_progress", "paused", "completed", "cancelled"]
+
+
+class Module(Base):
+    """A feature or epic-sized piece of work that groups issues across cycles. An issue can be in several."""
+
+    __tablename__ = "modules"
+    id: Mapped[uuid.UUID] = uuid_pk()
+    project_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), index=True)
+    name: Mapped[str] = mapped_column(String(120))
+    description: Mapped[str] = mapped_column(Text, default="")
+    status: Mapped[str] = mapped_column(String(20), default="planned")
+    lead_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    start_date: Mapped[date | None] = mapped_column(Date)
+    target_date: Mapped[date | None] = mapped_column(Date)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    lead: Mapped[User | None] = relationship()
+    __table_args__ = (UniqueConstraint("project_id", "name"),
+                      CheckConstraint("status IN ('backlog','planned','in_progress','paused','completed','cancelled')",
+                                      name="ck_modules_status"))
 
 
 issue_assignees = Table(
     "issue_assignees", Base.metadata,
     Column("issue_id", ForeignKey("issues.id", ondelete="CASCADE"), primary_key=True),
     Column("user_id", ForeignKey("users.id", ondelete="CASCADE"), primary_key=True, index=True),
+)
+
+issue_modules = Table(
+    "issue_modules", Base.metadata,
+    Column("issue_id", ForeignKey("issues.id", ondelete="CASCADE"), primary_key=True),
+    Column("module_id", ForeignKey("modules.id", ondelete="CASCADE"), primary_key=True, index=True),
 )
 
 issue_labels = Table(
@@ -237,8 +269,13 @@ class Issue(Base):
     reporter: Mapped[User | None] = relationship(foreign_keys=[reporter_id])
     assignees: Mapped[list[User]] = relationship(secondary=issue_assignees, order_by=User.display_name)
     labels: Mapped[list[Label]] = relationship(secondary=issue_labels, order_by=Label.name)
+    modules: Mapped[list[Module]] = relationship(secondary=issue_modules, order_by=Module.name)
     parent: Mapped["Issue | None"] = relationship(remote_side=[id])
     __table_args__ = (UniqueConstraint("project_id", "number"),)
+
+    @property
+    def module_ids(self) -> list[uuid.UUID]:
+        return [m.id for m in self.modules]
 
     @property
     def key(self) -> str:

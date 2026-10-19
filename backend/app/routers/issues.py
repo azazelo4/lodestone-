@@ -15,6 +15,7 @@ from ..models import (
     Issue,
     IssueType,
     Label,
+    Module,
     Priority,
     Project,
     Sprint,
@@ -38,7 +39,7 @@ router = APIRouter(prefix="/api", tags=["issues"])
 
 KEY = re.compile(r"^([A-Za-z][A-Za-z0-9]{1,9})-(\d+)$")
 LOAD = (selectinload(Issue.project), selectinload(Issue.state), selectinload(Issue.assignees),
-        selectinload(Issue.labels), selectinload(Issue.parent).selectinload(Issue.project),
+        selectinload(Issue.labels), selectinload(Issue.modules), selectinload(Issue.parent).selectinload(Issue.project),
         selectinload(Issue.reporter))
 
 
@@ -109,6 +110,15 @@ def _labels(db: Session, project: Project, ids: list[uuid.UUID]) -> list[Label]:
     return list(labels)
 
 
+def _modules(db: Session, project: Project, ids: list[uuid.UUID]) -> list[Module]:
+    if not ids:
+        return []
+    mods = db.scalars(select(Module).where(Module.project_id == project.id, Module.id.in_(ids))).all()
+    if len(mods) != len(set(ids)):
+        raise HTTPException(422, "Unknown module")
+    return list(mods)
+
+
 def _state(db: Session, project: Project, state_id: uuid.UUID | None) -> State:
     if state_id is None:
         st = db.scalar(select(State).where(State.project_id == project.id).order_by(State.position).limit(1))
@@ -124,7 +134,9 @@ def _sprint(db: Session, project: Project, sprint_id: uuid.UUID | None) -> Sprin
         return None
     sp = db.get(Sprint, sprint_id)
     if not sp or sp.project_id != project.id:
-        raise HTTPException(422, "Unknown sprint")
+        raise HTTPException(422, "Unknown cycle")
+    if sp.closed:
+        raise HTTPException(422, f"Cycle “{sp.name}” is completed")
     return sp
 
 
@@ -156,7 +168,8 @@ def list_issues(
     assignee: list[str] = Query(default=[], description="user id or 'me' or 'none'"),
     priority: list[Priority] = Query(default=[]),
     label_id: list[uuid.UUID] = Query(default=[]),
-    sprint_id: str | None = Query(default=None, description="sprint id or 'none'"),
+    sprint_id: str | None = Query(default=None, description="cycle id or 'none'"),
+    module_id: str | None = Query(default=None, description="module id or 'none'"),
     type: list[IssueType] = Query(default=[]),
     parent: str | None = Query(default=None, description="parent key, or 'none' for top-level only"),
     open_only: bool = False,
@@ -198,6 +211,10 @@ def list_issues(
         stmt = stmt.where(Issue.sprint_id.is_(None))
     elif sprint_id:
         stmt = stmt.where(Issue.sprint_id == uuid.UUID(sprint_id))
+    if module_id == "none":
+        stmt = stmt.where(~Issue.modules.any())
+    elif module_id:
+        stmt = stmt.where(Issue.modules.any(Module.id == uuid.UUID(module_id)))
     if type:
         stmt = stmt.where(Issue.type.in_(type))
     if parent == "none":
@@ -217,6 +234,7 @@ def create_issue(key: str, body: IssueIn, db: Session = Depends(get_db), user: U
     parent = _resolve_parent(db, project, body.parent_key)
     assignees = _members(db, project, body.assignee_ids)
     labels = _labels(db, project, body.label_ids)
+    mods = _modules(db, project, body.module_ids)
     sprint = _sprint(db, project, body.sprint_id)
     # atomic increment (row lock held until commit): numbers stay unique under concurrency
     number = db.execute(update(Project).where(Project.id == project.id)
@@ -227,7 +245,7 @@ def create_issue(key: str, body: IssueIn, db: Session = Depends(get_db), user: U
                   parent_id=parent.id if parent else None, sprint_id=sprint.id if sprint else None,
                   reporter_id=user.id, start_date=body.start_date, due_date=body.due_date, estimate=body.estimate,
                   position=top + 1024)
-    issue.assignees, issue.labels = assignees, labels
+    issue.assignees, issue.labels, issue.modules = assignees, labels, mods
     _apply_state_times(issue, st)
     db.add(issue)
     db.flush()
@@ -289,6 +307,11 @@ def patch_issue(key: str, body: IssuePatch, db: Session = Depends(get_db), user:
         if {lb.id for lb in new} != {lb.id for lb in issue.labels}:
             _log(db, issue, user, "labels", ", ".join(lb.name for lb in issue.labels), ", ".join(lb.name for lb in new))
             issue.labels = new
+    if "module_ids" in data:
+        new = _modules(db, project, data["module_ids"] or [])
+        if {m.id for m in new} != {m.id for m in issue.modules}:
+            _log(db, issue, user, "modules", ", ".join(m.name for m in issue.modules), ", ".join(m.name for m in new))
+            issue.modules = new
     if "parent_key" in data:
         par = _resolve_parent(db, project, data["parent_key"], self_id=issue.id)
         if (par.id if par else None) != issue.parent_id:
@@ -297,7 +320,8 @@ def patch_issue(key: str, body: IssuePatch, db: Session = Depends(get_db), user:
     if "sprint_id" in data and data["sprint_id"] != issue.sprint_id:
         sp = _sprint(db, project, data["sprint_id"])
         old = db.get(Sprint, issue.sprint_id) if issue.sprint_id else None
-        _log(db, issue, user, "sprint", old.name if old else None, sp.name if sp else None)
+        _log(db, issue, user, "sprint", old.name if old else None, sp.name if sp else None,
+             str(old.id) if old else None, str(sp.id) if sp else None)
         issue.sprint_id = sp.id if sp else None
 
     issue.updated_at = utcnow()
