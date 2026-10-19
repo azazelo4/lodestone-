@@ -309,6 +309,55 @@ class Activity(Base):
     actor: Mapped[User | None] = relationship()
 
 
+class Page(Base):
+    """A documentation page of a project (Markdown), in a tree."""
+
+    __tablename__ = "pages"
+    id: Mapped[uuid.UUID] = uuid_pk()
+    project_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), index=True)
+    parent_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("pages.id", ondelete="CASCADE"), index=True)
+    title: Mapped[str] = mapped_column(String(300))
+    body: Mapped[str] = mapped_column(Text, default="")
+    position: Mapped[float] = mapped_column(Float, default=0)
+    created_by_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    updated_by_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_by: Mapped[User | None] = relationship(foreign_keys=[updated_by_id])
+
+
+class ImportJob(Base):
+    """An import from Jira, Plane or Confluence, run in the background. Secrets are wiped when it ends."""
+
+    __tablename__ = "import_jobs"
+    id: Mapped[uuid.UUID] = uuid_pk()
+    source: Mapped[str] = mapped_column(String(20))  # jira | plane | confluence
+    status: Mapped[str] = mapped_column(String(10), default="queued")  # queued | running | done | failed
+    params: Mapped[dict] = mapped_column(JSONB, default=dict)
+    secrets: Mapped[str | None] = mapped_column(Text)
+    stats: Mapped[dict] = mapped_column(JSONB, default=dict)
+    log: Mapped[str] = mapped_column(Text, default="")
+    error: Mapped[str | None] = mapped_column(Text)
+    project_key: Mapped[str | None] = mapped_column(String(10))
+    created_by_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_by: Mapped[User | None] = relationship()
+
+
+class ImportLink(Base):
+    """What an external object became, so running the same import again updates instead of duplicating."""
+
+    __tablename__ = "import_links"
+    source: Mapped[str] = mapped_column(String(200), primary_key=True)  # e.g. jira:https://jira.corp.local
+    kind: Mapped[str] = mapped_column(String(20), primary_key=True)  # issue | comment | page | cycle | module | state
+    external_id: Mapped[str] = mapped_column(String(200), primary_key=True)
+    project_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), index=True)
+    local_id: Mapped[str] = mapped_column(String(64))
+
+
 class LoginAttempt(Base):
     __tablename__ = "login_attempts"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)

@@ -70,7 +70,7 @@ def migrated():
 def reset_db():
     with engine().begin() as c:
         c.execute(text("TRUNCATE users, projects, login_attempts, auth_providers, app_settings, "
-                       "notification_channels, notification_outbox RESTART IDENTITY CASCADE"))
+                       "notification_channels, notification_outbox, import_jobs RESTART IDENTITY CASCADE"))
         c.execute(text("DELETE FROM roles WHERE NOT builtin"))
         for key, (_, _, perms) in BUILTIN_ROLES.items():
             c.execute(text("UPDATE roles SET permissions = :p, is_default = :d WHERE key = :k"),

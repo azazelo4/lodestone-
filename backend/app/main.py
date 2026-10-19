@@ -9,11 +9,11 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy import select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-from . import delivery, providers
+from . import delivery, importers, providers
 from .config import get_settings
 from .db import engine, session_factory
 from .models import User, utcnow
-from .routers import admin, auth, issues, notifications, planning, projects, setup, users
+from .routers import admin, auth, docs, imports, issues, notifications, planning, projects, setup, users
 from .security import hash_password
 
 log = logging.getLogger("lodestone")
@@ -50,6 +50,7 @@ async def lifespan(_: FastAPI):
     if s.secret_key == "change-me":
         log.warning("LODESTONE_SECRET_KEY is the default value — set a random secret in production")
     bootstrap()
+    importers.fail_interrupted()
     worker = None
     if s.notify_worker:
         worker = delivery.Worker()
@@ -63,7 +64,7 @@ app = FastAPI(title="Lodestone", version="0.1.0", lifespan=lifespan, docs_url="/
               openapi_url="/api/openapi.json", redoc_url=None)
 
 for r in (auth.router, setup.router, admin.router, users.router, projects.router, issues.router,
-          notifications.router, planning.router):
+          notifications.router, planning.router, docs.router, imports.router):
     app.include_router(r)
 
 

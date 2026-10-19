@@ -13,6 +13,7 @@ from .models import (
     IssueType,
     Label,
     Module,
+    Page,
     Priority,
     Project,
     ProjectMember,
@@ -96,8 +97,38 @@ def run():
                        body="Fails on `hr.employee_history` — disk on segment 3 fills up during the dump."))
         db.add(Comment(issue_id=created[4].id, author_id=users[1].id,
                        body="Moved temp dir to the data volume, re-running tonight."))
+        _docs(db, p, users[0])
         db.commit()
         print("demo data created: project DEMO, users aigerim/daniyar/olga (password: demo-password)")
+
+
+DOCS = [
+    # title, parent idx, body
+    ("Platform handbook", None, "How the platform team works: where things run, who is on call, and how to change "
+     "them safely.\n\n## Contents\n\n- [On-call runbook](#)\n- Services and owners\n- Change process\n\n"
+     "> **Rule of thumb**\n>\n> If a change needs a maintenance window, it needs an issue in DEMO first."),
+    ("On-call runbook", 0, "## Before the shift\n\n1. Check the *Incidents* label on the board.\n"
+     "2. Make sure you can reach the bastion: `ssh bastion.corp.local`.\n\n## Greenplum backup failed\n\n"
+     "| Symptom | First step |\n| --- | --- |\n| `No space left on device` | Move the dump temp dir to the data "
+     "volume |\n| Lock timeout | Re-run after the nightly ETL finishes |\n\n```bash\n"
+     "gpbackup --dbname dwh --backup-dir /data/backup --jobs 4\n```"),
+    ("Services and owners", 0, "| Service | Host | Owner |\n| --- | --- | --- |\n| Nexus | nexus.corp.local | "
+     "Daniyar |\n| GitLab | gitlab.corp.local | Olga |\n| Greenplum | gp-master.corp.local | Aigerim |"),
+    ("Change process", 0, "- [ ] Issue with the plan and the rollback\n- [ ] Review by a second engineer\n"
+     "- [ ] Announce in the team channel\n- [ ] Close the issue with the result"),
+]
+
+
+def _docs(db, p: Project, author: User):
+    made: list[Page] = []
+    for n, (title, parent, body) in enumerate(DOCS):
+        pg = Page(project_id=p.id, title=title, body=body, position=(n + 1) * 1024,
+                  parent_id=made[parent].id if parent is not None else None,
+                  created_by_id=author.id, updated_by_id=author.id)
+        db.add(pg)
+        db.flush()
+        made.append(pg)
+    made[0].body = made[0].body.replace("(#)", f"(/p/{p.key}/docs/{made[1].id})")
 
 
 HISTORY_TITLES = ["Upgrade node exporter", "Alert on WAL archive lag", "Grafana dashboard for PXF",

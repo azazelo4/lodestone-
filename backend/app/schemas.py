@@ -512,3 +512,70 @@ class OutboxOut(ORM):
     created_at: datetime
     sent_at: datetime | None
     next_attempt_at: datetime
+
+
+# ---------- documentation pages
+class PageIn(BaseModel):
+    title: str = Field(min_length=1, max_length=300)
+    body: str = Field(default="", max_length=2_000_000)
+    parent_id: uuid.UUID | None = None
+
+
+class PagePatch(BaseModel):
+    title: str | None = Field(default=None, min_length=1, max_length=300)
+    body: str | None = Field(default=None, max_length=2_000_000)
+    parent_id: uuid.UUID | None = None
+    position: float | None = None
+
+
+class PageBrief(ORM):
+    id: uuid.UUID
+    parent_id: uuid.UUID | None
+    title: str
+    position: float
+    updated_at: datetime
+
+
+class PageOut(PageBrief):
+    body: str
+    created_at: datetime
+    updated_by: UserBrief | None
+
+
+# ---------- imports
+class ImportSource(BaseModel):
+    """Where to import from. Credentials are kept encrypted only while the job runs."""
+
+    source: str = Field(pattern=r"^(jira|plane|confluence)$")
+    url: str = Field(min_length=8, max_length=500)
+    workspace: str = Field(default="", max_length=100)  # Plane workspace slug
+    username: str = Field(default="", max_length=200)  # Jira/Confluence Cloud: account e-mail; Server: login
+    token: str = Field(default="", max_length=2000)  # API token / personal access token / password
+
+
+class ImportIn(ImportSource):
+    remote: str = Field(min_length=1, max_length=200)  # Jira project key, Plane project id, Confluence space key
+    target_key: str = Field(min_length=2, max_length=10, pattern=r"^[A-Za-z][A-Za-z0-9]{1,9}$")
+    target_name: str = Field(default="", max_length=200)  # used when the project is created
+    include_comments: bool = True
+
+
+class RemoteProject(BaseModel):
+    id: str
+    key: str
+    name: str
+
+
+class ImportJobOut(ORM):
+    id: uuid.UUID
+    source: str
+    status: str
+    params: dict
+    stats: dict
+    log: str
+    error: str | None
+    project_key: str | None
+    created_by: UserBrief | None
+    created_at: datetime
+    started_at: datetime | None
+    finished_at: datetime | None
