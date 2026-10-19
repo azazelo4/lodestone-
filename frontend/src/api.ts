@@ -15,7 +15,38 @@ export interface Me extends User { permissions: string[] }
 export interface UserBrief { id: string; username: string; display_name: string }
 export interface State { id: string; name: string; category: Category; position: number }
 export interface Label { id: string; name: string; color: string }
-export interface Sprint { id: string; name: string; goal: string; start_date: string | null; end_date: string | null; closed: boolean }
+export interface Progress {
+  total: number; scope: number; done: number; percent: number; by_category: Record<Category, number>;
+  points_scope: number; points_done: number; points_percent: number;
+}
+export type CycleStatus = "draft" | "upcoming" | "active" | "ended" | "completed";
+export interface Sprint {
+  id: string; name: string; goal: string; start_date: string | null; end_date: string | null; closed: boolean;
+  closed_at: string | null; status: CycleStatus; progress: Progress;
+}
+export type ModuleStatus = "backlog" | "planned" | "in_progress" | "paused" | "completed" | "cancelled";
+export interface Module {
+  id: string; name: string; description: string; status: ModuleStatus; lead: UserBrief | null;
+  start_date: string | null; target_date: string | null; created_at: string; progress: Progress;
+}
+export interface ModuleIn {
+  name: string; description: string; status: ModuleStatus; lead_id: string | null; start_date: string | null; target_date: string | null;
+}
+export interface BurnPoint { date: string; scope: number | null; done: number | null; points_scope: number | null; points_done: number | null }
+export interface ProgressDetail {
+  progress: Progress; start: string; end: string; burndown: BurnPoint[];
+  people: { user_id: string; name: string; total: number; done: number }[];
+}
+export interface TimeStats { count: number; median: number | null; p85: number | null }
+export interface ProjectAnalytics {
+  since: string;
+  totals: Progress & { overdue: number; unassigned: number };
+  weekly: { week: string; created: number; completed: number }[];
+  lead_time: TimeStats; cycle_time: TimeStats;
+  people: { user_id: string; name: string; todo: number; in_progress: number; done: number }[];
+  priority: Record<Priority, number>;
+  flow: ({ date: string } & Record<Category, number>)[];
+}
 export interface Project {
   id: string; key: string; name: string; description: string; is_private: boolean; archived: boolean;
   lead: UserBrief | null; states: State[]; my_role: string | null; my_permissions: string[]; open_issues: number;
@@ -51,7 +82,7 @@ export interface BindingIn { group: string; role: string; provider?: string | nu
 export interface Issue {
   id: string; key: string; number: number; type: IssueType; title: string; priority: Priority; state: State;
   assignees: UserBrief[]; labels: Label[]; parent_key: string | null; sprint_id: string | null;
-  start_date: string | null; due_date: string | null; estimate: number | null; position: number;
+  module_ids: string[]; start_date: string | null; due_date: string | null; estimate: number | null; position: number;
   created_at: string; updated_at: string; completed_at: string | null;
   subtasks_total: number; subtasks_done: number;
 }
@@ -112,6 +143,7 @@ function qs(params: Record<string, string | string[] | boolean | undefined>): st
 
 export interface IssueFilter {
   q?: string; assignee?: string[]; priority?: string[]; open_only?: boolean; label_id?: string[]; type?: string[];
+  sprint_id?: string; module_id?: string;
 }
 
 export const api = {
@@ -198,6 +230,22 @@ export const api = {
   labels: (key: string) => request<Label[]>("GET", `/projects/${key}/labels`),
   addLabel: (key: string, name: string, color: string) =>
     request<Label>("POST", `/projects/${key}/labels`, { name, color }),
+
+  cycles: (key: string) => request<Sprint[]>("GET", `/projects/${key}/sprints`),
+  addCycle: (key: string, b: { name: string; goal: string; start_date: string | null; end_date: string | null }) =>
+    request<Sprint>("POST", `/projects/${key}/sprints`, b),
+  patchCycle: (key: string, id: string, b: Partial<Pick<Sprint, "name" | "goal" | "start_date" | "end_date" | "closed">>) =>
+    request<Sprint>("PATCH", `/projects/${key}/sprints/${id}`, b),
+  deleteCycle: (key: string, id: string) => request<void>("DELETE", `/projects/${key}/sprints/${id}`),
+  completeCycle: (key: string, id: string, moveTo: string | null) =>
+    request<Sprint>("POST", `/projects/${key}/sprints/${id}/complete`, { move_to: moveTo }),
+  cycleProgress: (key: string, id: string) => request<ProgressDetail>("GET", `/projects/${key}/sprints/${id}/progress`),
+  modules: (key: string) => request<Module[]>("GET", `/projects/${key}/modules`),
+  addModule: (key: string, b: ModuleIn) => request<Module>("POST", `/projects/${key}/modules`, b),
+  patchModule: (key: string, id: string, b: Partial<ModuleIn>) => request<Module>("PATCH", `/projects/${key}/modules/${id}`, b),
+  deleteModule: (key: string, id: string) => request<void>("DELETE", `/projects/${key}/modules/${id}`),
+  moduleProgress: (key: string, id: string) => request<ProgressDetail>("GET", `/projects/${key}/modules/${id}/progress`),
+  analytics: (key: string, weeks: number) => request<ProjectAnalytics>("GET", `/projects/${key}/analytics?weeks=${weeks}`),
 
   issues: (key: string, f: IssueFilter = {}) =>
     request<Issue[]>("GET", `/projects/${key}/issues${qs(f as Record<string, string | string[] | boolean>)}`),

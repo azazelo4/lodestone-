@@ -142,11 +142,11 @@ export function IssueBody({ issueKey, onChanged, onOpen, onDeleted, header }: {
       const i = await api.issue(issueKey);
       setIssue(i);
       setMissing(false);
-      const [project, members, labels, cs, as] = await Promise.all([
+      const [project, members, labels, cs, as, cycles, modules] = await Promise.all([
         api.project(i.project_key), api.members(i.project_key), api.labels(i.project_key),
-        api.comments(issueKey), api.activity(issueKey),
+        api.comments(issueKey), api.activity(issueKey), api.cycles(i.project_key), api.modules(i.project_key),
       ]);
-      setCtx(projectData(project, members, labels));
+      setCtx(projectData(project, members, labels, cycles, modules));
       setComments(cs);
       setActs(as);
     } catch (e) {
@@ -293,6 +293,26 @@ export function IssueBody({ issueKey, onChanged, onOpen, onDeleted, header }: {
                          onChange={(ids) => patch({ label_ids: ids })}
                          render={(l) => <span className="label-chip"><i style={{ background: l.color }} />{l.name}</span>} />
           </div>
+          <label className="side-field">
+            <span>{t("cycle.field")}</span>
+            <select className="select" value={issue.sprint_id ?? ""} disabled={ro} onChange={(e) => patch({ sprint_id: e.target.value || null })}>
+              <option value="">{t("cycle.none")}</option>
+              {ctx.cycles.filter((c) => !c.closed || c.id === issue.sprint_id).map((c) => (
+                <option key={c.id} value={c.id} disabled={c.closed}>{c.name}</option>
+              ))}
+            </select>
+          </label>
+          <div className="side-field">
+            <span>{t("module.field")}</span>
+            <MultiPicker items={ctx.modules} selected={issue.module_ids} disabled={ro} placeholder={t("module.none")}
+                         onChange={(ids) => patch({ module_ids: ids })} render={(m) => <span>{m.name}</span>} />
+          </div>
+          <label className="side-field">
+            <span>{t("issue.estimate")}</span>
+            <input className="input num" type="number" min={0} step="0.5" defaultValue={issue.estimate ?? ""} disabled={ro}
+                   key={`est${issue.estimate ?? ""}`}
+                   onBlur={(e) => { const v = e.target.value === "" ? null : Number(e.target.value); if (v !== issue.estimate) patch({ estimate: v }); }} />
+          </label>
           <label className="side-field">
             <span>{t("issue.type")}</span>
             <select className="select" value={issue.type} disabled={ro} onChange={(e) => patch({ type: e.target.value })}>

@@ -4,8 +4,10 @@ import { useT } from "../i18n";
 import type { ProjectData } from "../pages/ProjectView";
 import { Avatar, Modal, MultiPicker } from "./bits";
 
-export default function NewIssue({ data, stateId, onClose, onCreated }: {
-  data: ProjectData; stateId: string | null; onClose: () => void; onCreated: (i: IssueDetail) => void;
+export interface IssueDefaults { sprint_id?: string; module_ids?: string[] }
+
+export default function NewIssue({ data, stateId, defaults = {}, onClose, onCreated }: {
+  data: ProjectData; stateId: string | null; defaults?: IssueDefaults; onClose: () => void; onCreated: (i: IssueDetail) => void;
 }) {
   const { t } = useT();
   const { project, members } = data;
@@ -18,6 +20,10 @@ export default function NewIssue({ data, stateId, onClose, onCreated }: {
   const [assignees, setAssignees] = useState<string[]>([]);
   const [due, setDue] = useState("");
   const [parent, setParent] = useState("");
+  const [cycle, setCycle] = useState(defaults.sprint_id ?? "");
+  const [mods, setMods] = useState<string[]>(defaults.module_ids ?? []);
+  const [estimate, setEstimate] = useState("");
+  const openCycles = data.cycles.filter((c) => !c.closed);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -30,6 +36,7 @@ export default function NewIssue({ data, stateId, onClose, onCreated }: {
       onCreated(await api.createIssue(project.key, {
         title: title.trim(), description, state_id: state, priority, type, assignee_ids: assignees,
         due_date: due || null, parent_key: parent.trim().toUpperCase() || null,
+        sprint_id: cycle || null, module_ids: mods, estimate: estimate === "" ? null : Number(estimate),
       }));
     } catch (err) {
       setError(err instanceof ApiError ? err.message : t("err.generic"));
@@ -79,9 +86,28 @@ export default function NewIssue({ data, stateId, onClose, onCreated }: {
             <input className="input" type="date" value={due} onChange={(e) => setDue(e.target.value)} />
           </label>
         </div>
-        <label className="field"><span>{t("issue.parent")}</span>
-          <input className="input num" placeholder={`${project.key}-1`} value={parent} onChange={(e) => setParent(e.target.value)} />
-        </label>
+        {(openCycles.length > 0 || data.modules.length > 0) && (
+          <div className="row2">
+            <label className="field"><span>{t("cycle.field")}</span>
+              <select className="select" value={cycle} onChange={(e) => setCycle(e.target.value)}>
+                <option value="">{t("cycle.none")}</option>
+                {openCycles.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </label>
+            <div className="field"><span>{t("module.field")}</span>
+              <MultiPicker items={data.modules} selected={mods} onChange={setMods} placeholder={t("module.none")}
+                           render={(m) => <span>{m.name}</span>} />
+            </div>
+          </div>
+        )}
+        <div className="row2">
+          <label className="field"><span>{t("issue.parent")}</span>
+            <input className="input num" placeholder={`${project.key}-1`} value={parent} onChange={(e) => setParent(e.target.value)} />
+          </label>
+          <label className="field"><span>{t("issue.estimate")}</span>
+            <input className="input num" type="number" min={0} step="0.5" value={estimate} onChange={(e) => setEstimate(e.target.value)} />
+          </label>
+        </div>
         <button hidden />
       </form>
     </Modal>

@@ -21,6 +21,9 @@ A self-hosted issue tracker for small engineering and ops teams. You sign in wit
   - Markdown descriptions and comments;
   - a full change history.
 - **Kanban board** with drag and drop, a **sortable list**, and a **"My work"** view across projects.
+- **Cycles**: time boxes of one or two weeks with a burndown, by issue count or by estimate. Open cycles cannot overlap; completing a cycle moves its unfinished issues to the next one.
+- **Modules**: a feature or part of the system with a status, a lead and a target date. They group issues across cycles, and an issue can be in several.
+- **Progress analytics** per project: cumulative flow by status, created vs completed per week, lead and cycle time (median and 85th percentile), workload per person, open issues by priority. Every chart has a table view.
 - **Custom statuses** per project. Each status maps to a fixed category (backlog, todo, in progress, done, cancelled), so metrics keep working whatever names a team picks.
 - **Analytics-ready schema.** The `analytics.*` views give lead time, cycle time, age, overdue flags and state transitions to Power BI, Metabase or Grafana. No ETL needed.
 - **REST API** with OpenAPI docs at `/api/docs`. It accepts the session cookie or a `Bearer` token.
@@ -171,6 +174,9 @@ GRANT SELECT ON ALL TABLES IN SCHEMA analytics TO bi_ro;
 | `analytics.issues` | One row per issue: project, state, category, assignees, dates, `lead_time_days`, `cycle_time_days`, `age_days`, `is_overdue` |
 | `analytics.issue_assignees` | Issue ↔ user, with `share` so per-person counts don't double-count shared issues |
 | `analytics.state_transitions` | Every status change, with `days_in_from_state` |
+| `analytics.cycles` | One row per cycle (the `sprint` column in `analytics.issues`): dates, issue counts by category, estimate totals |
+| `analytics.modules` | One row per module: status, lead, dates, issue counts and estimates |
+| `analytics.issue_modules` | Issue ↔ module |
 
 ## Development
 
@@ -196,7 +202,7 @@ The stack is FastAPI, SQLAlchemy 2, Alembic and ldap3 on the backend, and React 
 ## Roadmap
 
 - [ ] Attachments (S3 / MinIO)
-- [ ] Sprint board and burndown
+- [x] Cycles with burndown, modules, progress analytics
 - [ ] GitLab / GitHub integration: link MRs and commits by issue key
 - [x] Notifications: e-mail and messenger webhooks
 - [ ] Personal API tokens and outgoing webhooks

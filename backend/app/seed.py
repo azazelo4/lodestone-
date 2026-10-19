@@ -1,4 +1,5 @@
 """Demo data: `python -m app.seed`. Idempotent — does nothing if project DEMO exists."""
+import random
 from datetime import date, timedelta
 
 from sqlalchemy import select
@@ -11,10 +12,12 @@ from .models import (
     Issue,
     IssueType,
     Label,
+    Module,
     Priority,
     Project,
     ProjectMember,
     Role,
+    Sprint,
     State,
     User,
     utcnow,
@@ -88,13 +91,80 @@ def run():
             db.flush()
             db.add(Activity(issue_id=i.id, actor_id=users[0].id, field="created", new_value=title))
             created.append(i)
-        p.issue_seq = len(ISSUES)
+        p.issue_seq = _planning(db, p, users, states, created)
         db.add(Comment(issue_id=created[4].id, author_id=users[0].id,
                        body="Fails on `hr.employee_history` — disk on segment 3 fills up during the dump."))
         db.add(Comment(issue_id=created[4].id, author_id=users[1].id,
                        body="Moved temp dir to the data volume, re-running tonight."))
         db.commit()
         print("demo data created: project DEMO, users aigerim/daniyar/olga (password: demo-password)")
+
+
+HISTORY_TITLES = ["Upgrade node exporter", "Alert on WAL archive lag", "Grafana dashboard for PXF",
+                  "Clean old MinIO buckets", "Pin base images by digest", "Ansible role for VM hardening",
+                  "Rotate TLS certificates",
+                  "Move CI runners to new subnet", "Fix flaky integration test", "Quota for team namespaces",
+                  "Retention policy for Loki", "Patch OpenSSL on bastion", "Vault audit log shipping",
+                  "Terraform state migration", "Disk usage report for Greenplum", "Kafka topic cleanup"]
+
+
+def _planning(db, p, users, states, issues: list[Issue]) -> int:
+    """Cycles, modules and six weeks of history so the burndown and analytics have something to show."""
+    rng = random.Random(42)
+    today = date.today()
+    now = utcnow()
+    past = Sprint(project_id=p.id, name="Cycle 41", goal="Stabilise backups", start_date=today - timedelta(days=21),
+                  end_date=today - timedelta(days=8), closed=True, closed_at=now - timedelta(days=7))
+    current = Sprint(project_id=p.id, name="Cycle 42", goal="Nexus off Kubernetes",
+                     start_date=today - timedelta(days=7), end_date=today + timedelta(days=6))
+    nxt = Sprint(project_id=p.id, name="Cycle 43", start_date=today + timedelta(days=7),
+                 end_date=today + timedelta(days=20))
+    nexus = Module(project_id=p.id, name="Nexus migration", status="in_progress", lead_id=users[1].id,
+                   start_date=today - timedelta(days=28), target_date=today + timedelta(days=20),
+                   description="Nexus moves from Kubernetes to a dedicated VM.")
+    backup = Module(project_id=p.id, name="Backup hardening", status="planned", lead_id=users[0].id,
+                    target_date=today + timedelta(days=35))
+    db.add_all([past, current, nxt, nexus, backup])
+    db.flush()
+    for n, i in enumerate(issues):
+        i.created_at = now - timedelta(days=30 - n)
+        if n <= 3:
+            i.modules = [nexus]
+        elif n in (4, 5, 9):
+            i.modules = [backup]
+        i.sprint_id = past.id if n == 9 else current.id if n in (1, 2, 3, 4, 5, 8) else None
+    order = ["Backlog", "To Do", "In Progress", "In Review", "Done"]
+    number = len(issues)
+    for title in HISTORY_TITLES * 2:
+        number += 1
+        created = now - timedelta(days=rng.uniform(1, 42), hours=rng.uniform(0, 8))
+        steps = rng.choice([1, 2, 3, 4, 4, 5, 5])  # how far along the workflow it got
+        i = Issue(project_id=p.id, number=number, title=title, state_id=states["Backlog"].id, reporter_id=users[0].id,
+                  priority=rng.choice(list(Priority)), position=number * 1024, created_at=created,
+                  estimate=rng.choice([None, 1, 2, 3, 5]))
+        i.assignees = [rng.choice(users)] if rng.random() > 0.15 else []
+        db.add(i)
+        db.flush()
+        db.add(Activity(issue_id=i.id, actor_id=users[0].id, field="created", new_value=title, created_at=created))
+        at = created
+        for k in range(1, steps):
+            at = min(at + timedelta(days=rng.uniform(0.5, 5)), now - timedelta(minutes=5 * (steps - k)))
+            old, new = states[order[k - 1]], states[order[k]]
+            db.add(Activity(issue_id=i.id, actor_id=i.assignees[0].id if i.assignees else users[0].id, field="state",
+                            old_value=old.name, new_value=new.name, old_ref=str(old.id), new_ref=str(new.id),
+                            created_at=at))
+            i.state_id = new.id
+            if order[k] == "In Progress":
+                i.started_at = at
+            if order[k] == "Done":
+                i.completed_at = at
+        age = (today - created.date()).days
+        i.sprint_id = past.id if age > 8 and steps == 5 else (current.id if age <= 14 else None)
+        if "Nexus" in title or rng.random() < 0.25:
+            i.modules = [nexus]
+        elif rng.random() < 0.2:
+            i.modules = [backup]
+    return number
 
 
 if __name__ == "__main__":
