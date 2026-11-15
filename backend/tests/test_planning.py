@@ -80,16 +80,16 @@ def test_burndown_uses_history(nurlan):
 
 def test_cycle_dates_cannot_overlap(nurlan):
     _project(nurlan)
-    ok = nurlan.post("/api/projects/OPS/sprints", json={
-        "name": "A", "start_date": "2026-11-02", "end_date": "2026-11-15"})
+    base = datetime.now(timezone.utc).date() + timedelta(days=30)  # in the future, so both cycles are "upcoming"
+    day = lambda n: (base + timedelta(days=n)).isoformat()  # noqa: E731
+    ok = nurlan.post("/api/projects/OPS/sprints", json={"name": "A", "start_date": day(0), "end_date": day(13)})
     assert ok.status_code == 201
-    r = nurlan.post("/api/projects/OPS/sprints", json={
-        "name": "B", "start_date": "2026-11-15", "end_date": "2026-11-29"})
+    r = nurlan.post("/api/projects/OPS/sprints", json={"name": "B", "start_date": day(13), "end_date": day(27)})
     assert r.status_code == 409
     assert nurlan.post("/api/projects/OPS/sprints", json={
-        "name": "B", "start_date": "2026-11-16", "end_date": "2026-11-29"}).status_code == 201
+        "name": "B", "start_date": day(14), "end_date": day(27)}).status_code == 201
     assert nurlan.post("/api/projects/OPS/sprints", json={
-        "name": "C", "start_date": "2026-12-05", "end_date": "2026-12-01"}).status_code == 422
+        "name": "C", "start_date": day(33), "end_date": day(29)}).status_code == 422
     upcoming = nurlan.get("/api/projects/OPS/sprints").json()
     assert {c["status"] for c in upcoming} == {"upcoming"}
 
