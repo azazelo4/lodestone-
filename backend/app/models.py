@@ -1,6 +1,7 @@
 import enum
 import uuid
 from datetime import date, datetime, timezone
+from decimal import Decimal
 
 from sqlalchemy import (
     Boolean,
@@ -12,6 +13,7 @@ from sqlalchemy import (
     Float,
     ForeignKey,
     Integer,
+    Numeric,
     String,
     Table,
     Text,
@@ -324,6 +326,71 @@ class Page(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_by: Mapped[User | None] = relationship(foreign_keys=[updated_by_id])
+
+
+class ProjectFinance(Base):
+    """Budget and default hourly rate of a project. One row per project, created on first save."""
+
+    __tablename__ = "project_finance"
+    project_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), primary_key=True)
+    currency: Mapped[str] = mapped_column(String(3), default="USD")
+    budget: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
+    budget_hours: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
+    default_rate: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))  # per hour, for people without a rate
+    start_date: Mapped[date | None] = mapped_column(Date)  # with end_date, spreads the budget into a plan line
+    end_date: Mapped[date | None] = mapped_column(Date)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
+class MemberRate(Base):
+    """Hourly rate of a person in a project from a date on. The latest rate not after the work date applies."""
+
+    __tablename__ = "member_rates"
+    id: Mapped[uuid.UUID] = uuid_pk()
+    project_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), index=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    rate: Mapped[Decimal] = mapped_column(Numeric(12, 2))
+    valid_from: Mapped[date] = mapped_column(Date)
+    user: Mapped[User] = relationship()
+    __table_args__ = (UniqueConstraint("project_id", "user_id", "valid_from"),
+                      CheckConstraint("rate >= 0", name="ck_member_rates_rate"))
+
+
+class Worklog(Base):
+    """Time spent on an issue by a person on a day."""
+
+    __tablename__ = "worklogs"
+    id: Mapped[uuid.UUID] = uuid_pk()
+    project_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), index=True)
+    issue_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("issues.id", ondelete="CASCADE"), index=True)
+    user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), index=True)
+    work_date: Mapped[date] = mapped_column(Date)
+    minutes: Mapped[int] = mapped_column(Integer)
+    note: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    user: Mapped[User | None] = relationship()
+    issue: Mapped["Issue"] = relationship()
+    __table_args__ = (CheckConstraint("minutes > 0 AND minutes <= 1440", name="ck_worklogs_minutes"),)
+
+
+class Expense(Base):
+    """Money spent on a project besides people's time: licenses, hardware, contractors, travel."""
+
+    __tablename__ = "expenses"
+    id: Mapped[uuid.UUID] = uuid_pk()
+    project_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), index=True)
+    spent_on: Mapped[date] = mapped_column(Date)
+    amount: Mapped[Decimal] = mapped_column(Numeric(14, 2))
+    category: Mapped[str] = mapped_column(String(40), default="other")
+    description: Mapped[str] = mapped_column(Text, default="")
+    issue_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("issues.id", ondelete="SET NULL"))
+    module_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("modules.id", ondelete="SET NULL"))
+    created_by_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    issue: Mapped["Issue | None"] = relationship()
+    module: Mapped[Module | None] = relationship()
+    created_by: Mapped[User | None] = relationship()
+    __table_args__ = (CheckConstraint("amount >= 0", name="ck_expenses_amount"),)
 
 
 class ImportJob(Base):

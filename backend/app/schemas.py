@@ -1,6 +1,7 @@
 import re
 import uuid
 from datetime import date, datetime
+from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -579,3 +580,146 @@ class ImportJobOut(ORM):
     created_at: datetime
     started_at: datetime | None
     finished_at: datetime | None
+
+
+# ---------- finance
+class FinanceSettingsIn(BaseModel):
+    currency: str = Field(default="USD", pattern=r"^[A-Z]{3}$")
+    budget: Decimal | None = Field(default=None, ge=0, max_digits=14, decimal_places=2)
+    budget_hours: Decimal | None = Field(default=None, ge=0, max_digits=10, decimal_places=2)
+    default_rate: Decimal | None = Field(default=None, ge=0, max_digits=12, decimal_places=2)
+    start_date: date | None = None
+    end_date: date | None = None
+
+
+class FinanceSettingsOut(BaseModel):
+    currency: str = "USD"
+    budget: float | None = None
+    budget_hours: float | None = None
+    default_rate: float | None = None
+    start_date: date | None = None
+    end_date: date | None = None
+
+
+class RateIn(BaseModel):
+    user_id: uuid.UUID
+    rate: Decimal = Field(ge=0, max_digits=12, decimal_places=2)
+    valid_from: date
+
+
+class RateOut(BaseModel):
+    id: uuid.UUID
+    user: UserBrief
+    rate: float
+    valid_from: date
+
+
+class WorklogIn(BaseModel):
+    minutes: int = Field(gt=0, le=1440)
+    work_date: date | None = None  # today
+    note: str = Field(default="", max_length=2000)
+    user_id: uuid.UUID | None = None  # someone else's time: needs finance.manage
+
+
+class WorklogPatch(BaseModel):
+    minutes: int | None = Field(default=None, gt=0, le=1440)
+    work_date: date | None = None
+    note: str | None = Field(default=None, max_length=2000)
+
+
+class WorklogOut(BaseModel):
+    id: uuid.UUID
+    issue_key: str
+    issue_title: str
+    user: UserBrief | None
+    work_date: date
+    minutes: int
+    note: str
+    created_at: datetime
+    cost: float | None = None  # only for people who may see money
+
+
+class IssueWorklogs(BaseModel):
+    total_minutes: int
+    estimate: float | None
+    currency: str | None = None  # set when costs are shown
+    items: list[WorklogOut]
+
+
+class ExpenseIn(BaseModel):
+    spent_on: date
+    amount: Decimal = Field(ge=0, max_digits=14, decimal_places=2)
+    category: str = Field(default="other", min_length=1, max_length=40)
+    description: str = Field(default="", max_length=2000)
+    issue_key: str | None = None
+    module_id: uuid.UUID | None = None
+
+
+class ExpensePatch(BaseModel):
+    spent_on: date | None = None
+    amount: Decimal | None = Field(default=None, ge=0, max_digits=14, decimal_places=2)
+    category: str | None = Field(default=None, min_length=1, max_length=40)
+    description: str | None = Field(default=None, max_length=2000)
+    issue_key: str | None = None
+    module_id: uuid.UUID | None = None
+
+
+class NamedRef(BaseModel):
+    id: uuid.UUID
+    name: str
+
+
+class ExpenseOut(BaseModel):
+    id: uuid.UUID
+    spent_on: date
+    amount: float
+    category: str
+    description: str
+    issue_key: str | None
+    module: NamedRef | None
+    created_by: UserBrief | None
+    created_at: datetime
+
+
+class FinanceTotals(BaseModel):
+    budget: float | None
+    budget_hours: float | None
+    hours: float
+    labor: float
+    expenses: float
+    spent: float
+    remaining: float | None
+    percent: float | None  # of budget spent
+    hours_percent: float | None
+    unrated_hours: float  # hours of people with no rate while the project has no default rate
+    forecast: float | None  # spend at end_date if the burn rate so far holds
+
+
+class FinanceMonth(BaseModel):
+    month: date
+    hours: float
+    labor: float
+    expenses: float
+    actual: float | None  # cumulative spend; None for months in the future
+    plan: float | None  # cumulative budget spread evenly from start_date to end_date
+
+
+class FinanceBucket(BaseModel):
+    id: uuid.UUID | None = None
+    name: str
+    hours: float
+    cost: float
+    rate: float | None = None
+    estimate: float | None = None
+    key: str | None = None
+
+
+class FinanceSummary(BaseModel):
+    settings: FinanceSettingsOut
+    totals: FinanceTotals
+    months: list[FinanceMonth]
+    people: list[FinanceBucket]
+    modules: list[FinanceBucket]
+    cycles: list[FinanceBucket]
+    issues: list[FinanceBucket]
+    categories: list[FinanceBucket]

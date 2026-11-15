@@ -35,15 +35,20 @@ LABELS_MANAGE = "labels.manage"
 SPRINTS_MANAGE = "sprints.manage"
 MODULES_MANAGE = "modules.manage"
 DOCS_EDIT = "docs.edit"
+TIME_LOG = "time.log"
+FINANCE_VIEW = "finance.view"
+FINANCE_MANAGE = "finance.manage"
 
 GLOBAL_PERMISSIONS = [USERS_MANAGE, ROLES_MANAGE, AUTH_MANAGE, NOTIFICATIONS_MANAGE, IMPORTS_RUN, PROJECTS_CREATE]
 PROJECT_PERMISSIONS = [PROJECT_READ, PROJECT_MANAGE, MEMBERS_MANAGE, ISSUES_CREATE, ISSUES_EDIT, ISSUES_DELETE,
-                       COMMENTS_CREATE, COMMENTS_MODERATE, LABELS_MANAGE, SPRINTS_MANAGE, MODULES_MANAGE, DOCS_EDIT]
+                       COMMENTS_CREATE, COMMENTS_MODERATE, LABELS_MANAGE, SPRINTS_MANAGE, MODULES_MANAGE, DOCS_EDIT,
+                       TIME_LOG, FINANCE_VIEW, FINANCE_MANAGE]
 ALL_PERMISSIONS = GLOBAL_PERMISSIONS + PROJECT_PERMISSIONS
 
 # builtin roles: key -> (scope, name, permissions). Project "admin" always keeps every project permission.
+# money (rates, costs, budget) is admin-only by default; members log their own time and see hours
 MEMBER_PERMS = [PROJECT_READ, ISSUES_CREATE, ISSUES_EDIT, COMMENTS_CREATE, LABELS_MANAGE, SPRINTS_MANAGE,
-                MODULES_MANAGE, DOCS_EDIT]
+                MODULES_MANAGE, DOCS_EDIT, TIME_LOG]
 BUILTIN_ROLES = {
     "admin": ("project", "Project admin", PROJECT_PERMISSIONS),
     "member": ("project", "Member", MEMBER_PERMS),
