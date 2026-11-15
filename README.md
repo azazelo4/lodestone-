@@ -24,6 +24,7 @@ A self-hosted issue tracker for small engineering and ops teams. You sign in wit
 - **Cycles**: time boxes of one or two weeks with a burndown, by issue count or by estimate. Open cycles cannot overlap; completing a cycle moves its unfinished issues to the next one.
 - **Modules**: a feature or part of the system with a status, a lead and a target date. They group issues across cycles, and an issue can be in several.
 - **Progress analytics** per project: cumulative flow by status, created vs completed per week, lead and cycle time (median and 85th percentile), workload per person, open issues by priority. Every chart has a table view.
+- **Finance** per project: a budget in money and hours, hourly rates per person with history, time logged on issues, other expenses (licenses, hardware, contractors), and plan vs actual with a forecast at the end date. Money is visible only to roles with `finance.view`; everyone else sees hours.
 - **Documentation** per project: Markdown pages in a tree, with preview, search by title and links between pages.
 - **Import from Jira, Plane and Confluence**: projects with issues, statuses, sprints, components or modules, epics, sub-tasks and comments; Confluence spaces become project documentation. Running an import again updates what it brought in before.
 - **Custom statuses** per project. Each status maps to a fixed category (backlog, todo, in progress, done, cancelled), so metrics keep working whatever names a team picks.
@@ -65,9 +66,10 @@ If those variables are set (Helm, compose, CI), the wizard is skipped and the va
 
 ### Roles and permissions
 
-A role is a named set of permissions. Global permissions: `users.manage`, `roles.manage`, `auth.manage`, `projects.create`. Project permissions: `project.read`, `project.manage`, `members.manage`, `issues.create`, `issues.edit`, `issues.delete`, `comments.create`, `comments.moderate`, `labels.manage`, `sprints.manage`.
+A role is a named set of permissions. Global permissions: `users.manage`, `roles.manage`, `auth.manage`, `projects.create`. Project permissions: `project.read`, `project.manage`, `members.manage`, `issues.create`, `issues.edit`, `issues.delete`, `comments.create`, `comments.moderate`, `labels.manage`, `sprints.manage`, `modules.manage`, `docs.edit`, `time.log`, `finance.view`, `finance.manage`.
 
 - Builtin project roles `admin`, `member`, `viewer`, and the global `user` role every account has. Add your own in **Administration → Roles**.
+- Money is admin-only by default: `member` logs its own time (`time.log`) and sees hours, while rates, costs, the budget and expenses need `finance.view` (read) or `finance.manage` (edit, and fix anyone's time). For a project manager who should see costs, make a role with `finance.view`.
 - A project permission inside a global role applies to every project, e.g. an "Auditor" role with `project.read`.
 - Roles can be given to a directory group: an LDAP group DN or an IdP group name, globally (**Administration → Groups**) or in one project (**Project settings → Directory groups**). Groups are refreshed at every sign-in.
 - Nobody can give a role with permissions they do not have themselves. Administrators (`is_admin`, the LDAP/IdP admin group) have every permission.
@@ -198,6 +200,11 @@ GRANT SELECT ON ALL TABLES IN SCHEMA analytics TO bi_ro;
 | `analytics.cycles` | One row per cycle (the `sprint` column in `analytics.issues`): dates, issue counts by category, estimate totals |
 | `analytics.modules` | One row per module: status, lead, dates, issue counts and estimates |
 | `analytics.issue_modules` | Issue ↔ module |
+| `analytics.worklogs` | Time logged: person, issue, day, `hours`, the `rate` that applied and `cost` |
+| `analytics.expenses` | Expenses besides time: date, amount, category, issue, module |
+| `analytics.project_budgets` | One row per project with a budget: budget in money and hours, hours logged, labor cost, expenses |
+
+The finance views contain rates and costs. Grant them only to BI accounts that may see money, or revoke them from `bi_ro`: `REVOKE SELECT ON analytics.worklogs, analytics.expenses, analytics.project_budgets FROM bi_ro;`.
 
 ## Development
 
@@ -228,6 +235,7 @@ The stack is FastAPI, SQLAlchemy 2, Alembic and ldap3 on the backend, and React 
 - [x] Notifications: e-mail and messenger webhooks
 - [ ] Personal API tokens and outgoing webhooks
 - [x] Project documentation, import from Jira, Plane and Confluence
+- [x] Project finance: budget, rates, time tracking, expenses, plan vs actual
 - [ ] Saved filters, issue templates, CSV / Excel import
 
 ## License

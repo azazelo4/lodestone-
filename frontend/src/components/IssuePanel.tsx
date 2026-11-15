@@ -8,6 +8,7 @@ import { TKey, useT } from "../i18n";
 import {
   Avatar, Avatars, DueDate, Markdown, MultiPicker, PriorityIcon, StateDot, timeAgo, Toast,
 } from "./bits";
+import TimeLog from "./TimeLog";
 
 const PRIORITIES: Priority[] = ["urgent", "high", "medium", "low", "none"];
 const TYPES: IssueType[] = ["task", "bug", "story", "epic"];
@@ -255,6 +256,8 @@ export function IssueBody({ issueKey, onChanged, onOpen, onDeleted, header }: {
               <button className="btn" disabled={!newSub.trim()}>+</button>
             </form>
           )}
+
+          <TimeLog issueKey={issue.key} ctx={ctx} />
 
           <div className="section-h">{t("issue.comments")} <span className="n num">{comments.length || ""}</span></div>
           <div className="feed">{feed.map((f) => f.el)}</div>

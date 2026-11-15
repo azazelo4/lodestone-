@@ -63,6 +63,35 @@ export interface Project {
   id: string; key: string; name: string; description: string; is_private: boolean; archived: boolean;
   lead: UserBrief | null; states: State[]; my_role: string | null; my_permissions: string[]; open_issues: number;
 }
+export interface FinanceSettings {
+  currency: string; budget: number | null; budget_hours: number | null; default_rate: number | null;
+  start_date: string | null; end_date: string | null;
+}
+export interface Rate { id: string; user: UserBrief; rate: number; valid_from: string }
+export interface Worklog {
+  id: string; issue_key: string; issue_title: string; user: UserBrief | null; work_date: string; minutes: number;
+  note: string; created_at: string; cost: number | null;
+}
+export interface IssueWorklogs { total_minutes: number; estimate: number | null; currency: string | null; items: Worklog[] }
+export interface Expense {
+  id: string; spent_on: string; amount: number; category: string; description: string; issue_key: string | null;
+  module: { id: string; name: string } | null; created_by: UserBrief | null; created_at: string;
+}
+export interface ExpenseIn {
+  spent_on: string; amount: number; category: string; description: string; issue_key: string | null; module_id: string | null;
+}
+export interface FinanceBucket {
+  id: string | null; name: string; hours: number; cost: number; rate: number | null; estimate: number | null; key: string | null;
+}
+export interface FinanceSummary {
+  settings: FinanceSettings;
+  totals: {
+    budget: number | null; budget_hours: number | null; hours: number; labor: number; expenses: number; spent: number;
+    remaining: number | null; percent: number | null; hours_percent: number | null; unrated_hours: number; forecast: number | null;
+  };
+  months: { month: string; hours: number; labor: number; expenses: number; actual: number | null; plan: number | null }[];
+  people: FinanceBucket[]; modules: FinanceBucket[]; cycles: FinanceBucket[]; issues: FinanceBucket[]; categories: FinanceBucket[];
+}
 export interface RoleBrief { id: string; key: string; name: string }
 export interface Role extends RoleBrief {
   description: string; scope: "global" | "project"; permissions: string[]; builtin: boolean; is_default: boolean;
@@ -217,6 +246,20 @@ export const api = {
   userRoles: (id: string) => request<RoleBrief[]>("GET", `/users/${id}/roles`),
   setUserRoles: (id: string, roles: string[]) => request<RoleBrief[]>("PUT", `/users/${id}/roles`, { roles }),
   userGroups: (id: string) => request<string[]>("GET", `/users/${id}/groups`),
+
+  finance: (key: string) => request<FinanceSummary>("GET", `/projects/${key}/finance`),
+  saveFinance: (key: string, b: FinanceSettings) => request<FinanceSettings>("PUT", `/projects/${key}/finance/settings`, b),
+  rates: (key: string) => request<Rate[]>("GET", `/projects/${key}/finance/rates`),
+  setRate: (key: string, b: { user_id: string; rate: number; valid_from: string }) =>
+    request<Rate>("POST", `/projects/${key}/finance/rates`, b),
+  deleteRate: (key: string, id: string) => request<void>("DELETE", `/projects/${key}/finance/rates/${id}`),
+  expenses: (key: string) => request<Expense[]>("GET", `/projects/${key}/finance/expenses`),
+  addExpense: (key: string, b: ExpenseIn) => request<Expense>("POST", `/projects/${key}/finance/expenses`, b),
+  deleteExpense: (key: string, id: string) => request<void>("DELETE", `/projects/${key}/finance/expenses/${id}`),
+  worklogs: (issueKey: string) => request<IssueWorklogs>("GET", `/issues/${issueKey}/worklogs`),
+  logTime: (issueKey: string, b: { minutes: number; work_date: string; note: string }) =>
+    request<Worklog>("POST", `/issues/${issueKey}/worklogs`, b),
+  deleteWorklog: (id: string) => request<void>("DELETE", `/worklogs/${id}`),
 
   projects: () => request<Project[]>("GET", "/projects"),
   project: (key: string) => request<Project>("GET", `/projects/${key}`),

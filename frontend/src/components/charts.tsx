@@ -32,6 +32,8 @@ function niceMax(v: number) {
 }
 
 const fmt = (v: number | null) => (v === null ? "—" : Number.isInteger(v) ? String(v) : v.toFixed(1));
+// axis ticks stay narrow for money: 25000 -> 25k, 1500000 -> 1.5M
+const tick = (v: number) => (v >= 1e6 ? `${+(v / 1e6).toFixed(1)}M` : v >= 1e4 ? `${+(v / 1e3).toFixed(1)}k` : fmt(v));
 
 export function Legend({ series }: { series: Series[] }) {
   if (series.length < 2) return null;
@@ -68,7 +70,7 @@ function YAxis({ max, h, w }: { max: number; h: number; w: number }) {
         return (
           <g key={v}>
             <line x1={M.l} x2={w - M.r} y1={y} y2={y} className={v === 0 ? "base" : "grid"} />
-            <text x={M.l - 6} y={y} dy="0.32em" textAnchor="end">{fmt(v)}</text>
+            <text x={M.l - 6} y={y} dy="0.32em" textAnchor="end">{tick(v)}</text>
           </g>
         );
       })}

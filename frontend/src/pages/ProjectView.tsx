@@ -9,6 +9,7 @@ import ProjectSettings from "../components/ProjectSettings";
 import { useT } from "../i18n";
 import Analytics from "./Analytics";
 import Docs from "./Docs";
+import Finance from "./Finance";
 import { Cycles, Modules } from "./Planning";
 
 export interface ProjectData {
@@ -97,6 +98,7 @@ export default function ProjectView() {
           <NavLink to={`/p/${project.key}/modules`} className={tab}>{t("view.modules")}</NavLink>
           <NavLink to={`/p/${project.key}/analytics`} className={tab}>{t("view.analytics")}</NavLink>
           <NavLink to={`/p/${project.key}/docs`} className={tab}>{t("view.docs")}</NavLink>
+          {(data.can("finance.view") || data.can("finance.manage")) && <NavLink to={`/p/${project.key}/finance`} className={tab}>{t("view.finance")}</NavLink>}
           {(data.can("project.manage") || data.can("members.manage")) && <NavLink to={`/p/${project.key}/settings`} className={tab}>{t("view.settings")}</NavLink>}
         </nav>
         <span className="spacer" />
@@ -113,6 +115,7 @@ export default function ProjectView() {
         <Route path="modules/*" element={<div className="content"><Modules data={data} reload={loadProject} tick={planTick} onOpen={openIssue}
                                                                           onNewIssue={(d) => newIssue(null, d)} /></div>} />
         <Route path="docs/*" element={<div className="content"><Docs data={data} /></div>} />
+        <Route path="finance" element={<div className="content"><Finance data={data} tick={planTick} /></div>} />
         <Route path="analytics" element={<div className="content"><Analytics data={data} tick={planTick} /></div>} />
         <Route path="*" element={
           <>

@@ -503,3 +503,20 @@ button, input, select, textarea { font: inherit; color: inherit; }
   .doc-text, .doc-preview { min-height: 300px; }
 }
 .prov-form > .seg, .field > .seg { justify-self: start; margin-bottom: 0; }
+
+/* finance and time tracking */
+.worklogs { display: grid; }
+.worklog { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
+.worklog .who { white-space: nowrap; }
+.worklog .dur { font-weight: 500; white-space: nowrap; }
+.worklog .note { flex: 1; min-width: 0; color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.worklog-form { display: grid; grid-template-columns: 130px 150px minmax(0, 1fr) auto; gap: 8px; margin-top: 8px; }
+.fin-form { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; margin-bottom: 8px; }
+.fin-form .field.wide { grid-column: span 2; }
+.expense-form { margin-top: 12px; align-items: end; }
+.stats.money { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
+.stats.money .stat-value { font-size: clamp(18px, 1.9vw, 24px); overflow-wrap: anywhere; }
+@media (max-width: 720px) {
+  .worklog-form { grid-template-columns: 1fr 1fr; }
+  .fin-form .field.wide { grid-column: auto; }
+}
