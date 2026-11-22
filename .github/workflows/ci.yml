@@ -1,10 +1,24 @@
 name: CI
 
+# Automatic runs are paused for now: nothing is built or published on push, tag or PR.
+# Every job can still be started by hand: Actions -> CI -> "Run workflow".
+# The image job pushes to ghcr.io only if "publish_image" is ticked.
+# To re-enable automatic runs, replace the "on:" block below with:
+#
+# on:
+#   push:
+#     branches: [main]
+#     tags: ["v*"]
+#   pull_request:
+#
+# and remove the "if:" line from the image job.
 on:
-  push:
-    branches: [main]
-    tags: ["v*"]
-  pull_request:
+  workflow_dispatch:
+    inputs:
+      publish_image:
+        description: "Build and push the Docker image to ghcr.io"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -66,6 +80,7 @@ jobs:
           helm lint deploy/helm/lodestone -f deploy/examples/values-prod.yaml
 
   image:
+    if: ${{ inputs.publish_image }}
     needs: [backend, frontend, helm]
     runs-on: ubuntu-latest
     permissions:

@@ -49,6 +49,8 @@ On GitHub, CI (`.github/workflows/ci.yml`) runs the backend tests on PostgreSQL,
 - a push to `main` publishes `ghcr.io/<you>/lodestone:latest` and `sha-…`;
 - the tag `v0.1.0` publishes `ghcr.io/<you>/lodestone:0.1.0`.
 
+> Automatic CI runs are currently paused: pushes, tags and PRs start nothing. Run it by hand in Actions → CI → "Run workflow" and tick "publish_image" to push the image. The comment at the top of `ci.yml` says how to turn automatic runs back on.
+
 The chart uses `appVersion` (0.1.0) as the image tag by default, so push the tag.
 
 ## Step 2. Make the image reachable
